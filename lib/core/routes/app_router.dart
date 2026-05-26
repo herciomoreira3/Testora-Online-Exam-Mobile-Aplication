@@ -11,6 +11,7 @@ import '../../features/exam/presentation/result_screen.dart';
 import '../../features/history/presentation/history_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
 import '../../features/admin/presentation/admin_dashboard_screen.dart';
+import '../../features/admin/presentation/manage_users_screen.dart';
 import '../../features/professor/presentation/prof_dashboard_screen.dart';
 import '../../shared/models/result_model.dart';
 
@@ -114,6 +115,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/admin-dashboard',
         builder: (context, state) => const AdminDashboardScreen(),
+      ),
+      GoRoute(
+        path: '/admin/manage-users',
+        builder: (context, state) => const ManageUsersScreen(),
       ),
       GoRoute(
         path: '/prof-dashboard',

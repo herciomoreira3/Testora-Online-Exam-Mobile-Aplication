@@ -66,4 +66,6 @@
   "student_name": "Student Name",
   "is_active": "Is Active",
   "change_role": "Change Role"
+  ,
+  "professores": "Professor"
 }
