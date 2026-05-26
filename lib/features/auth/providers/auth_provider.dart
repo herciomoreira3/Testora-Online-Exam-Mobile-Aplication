@@ -2,16 +2,20 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../shared/models/user_model.dart';
 import '../repositories/auth_repository.dart';
 
-final authRepositoryProvider = Provider<AuthRepository>((ref) => AuthRepository());
+final authRepositoryProvider = Provider<AuthRepository>(
+  (ref) => AuthRepository(),
+);
 
 final authStateProvider = StreamProvider((ref) {
   return ref.watch(authRepositoryProvider).authStateChanges;
 });
 
 final userProfileProvider = FutureProvider<UserModel?>((ref) async {
-  final authState = ref.watch(authStateProvider).value;
+  // Wait for the auth state stream to emit its first value to avoid
+  // returning `null` prematurely while providers are still initializing.
+  final authState = await ref.watch(authStateProvider.future);
   if (authState == null) return null;
-  return ref.watch(authRepositoryProvider).getUserProfile(authState.uid);
+  return ref.read(authRepositoryProvider).getUserProfile(authState.uid);
 });
 
 class AuthController extends Notifier<AsyncValue<void>> {
@@ -42,12 +46,14 @@ class AuthController extends Notifier<AsyncValue<void>> {
   }) async {
     state = const AsyncLoading();
     try {
-      await ref.read(authRepositoryProvider).signUpWithEmail(
-        email: email,
-        password: password,
-        name: name,
-        school: school,
-      );
+      await ref
+          .read(authRepositoryProvider)
+          .signUpWithEmail(
+            email: email,
+            password: password,
+            name: name,
+            school: school,
+          );
       // Force refreshing the userProfileProvider
       ref.invalidate(userProfileProvider);
       state = const AsyncData(null);
@@ -66,6 +72,7 @@ class AuthController extends Notifier<AsyncValue<void>> {
   }
 }
 
-final authControllerProvider = NotifierProvider<AuthController, AsyncValue<void>>(() {
-  return AuthController();
-});
+final authControllerProvider =
+    NotifierProvider<AuthController, AsyncValue<void>>(() {
+      return AuthController();
+    });

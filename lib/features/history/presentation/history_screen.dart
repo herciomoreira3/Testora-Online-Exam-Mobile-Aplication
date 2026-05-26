@@ -8,9 +8,15 @@ import '../../../shared/models/result_model.dart';
 import '../../../core/themes/app_theme.dart';
 
 final studentResultsProvider = StreamProvider<List<ResultModel>>((ref) {
-  final uid = ref.watch(authStateProvider).value?.uid;
-  if (uid == null) return const Stream.empty();
-  return ref.watch(examRepositoryProvider).getStudentExamResults(uid);
+  final authStateAsync = ref.watch(authStateProvider);
+  return authStateAsync.when(
+    data: (user) {
+      if (user == null) return const Stream.empty();
+      return ref.watch(examRepositoryProvider).getStudentExamResults(user.uid);
+    },
+    loading: () => const Stream.empty(),
+    error: (_, __) => const Stream.empty(),
+  );
 });
 
 class HistoryScreen extends ConsumerWidget {
@@ -77,9 +83,17 @@ class HistoryScreen extends ConsumerWidget {
                         width: 58,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: (isPassed ? AppTheme.successColor : AppTheme.errorColor).withOpacity(0.1),
+                          color:
+                              (isPassed
+                                      ? AppTheme.successColor
+                                      : AppTheme.errorColor)
+                                  .withOpacity(0.1),
                           border: Border.all(
-                            color: (isPassed ? AppTheme.successColor : AppTheme.errorColor).withOpacity(0.3),
+                            color:
+                                (isPassed
+                                        ? AppTheme.successColor
+                                        : AppTheme.errorColor)
+                                    .withOpacity(0.3),
                             width: 1.5,
                           ),
                         ),
@@ -89,13 +103,15 @@ class HistoryScreen extends ConsumerWidget {
                             style: TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.bold,
-                              color: isPassed ? AppTheme.successColor : AppTheme.errorColor,
+                              color: isPassed
+                                  ? AppTheme.successColor
+                                  : AppTheme.errorColor,
                             ),
                           ),
                         ),
                       ),
                       const SizedBox(width: 16),
-                      
+
                       // Details metadata
                       Expanded(
                         child: Column(
@@ -110,27 +126,45 @@ class HistoryScreen extends ConsumerWidget {
                             const SizedBox(height: 6),
                             Row(
                               children: [
-                                const Icon(Icons.timer_outlined, size: 14, color: Color(0xFF64748B)),
+                                const Icon(
+                                  Icons.timer_outlined,
+                                  size: 14,
+                                  color: Color(0xFF64748B),
+                                ),
                                 const SizedBox(width: 4),
                                 Text(
                                   _formatDuration(result.timeTaken),
-                                  style: theme.textTheme.bodyMedium?.copyWith(fontSize: 12),
+                                  style: theme.textTheme.bodyMedium?.copyWith(
+                                    fontSize: 12,
+                                  ),
                                 ),
                                 const SizedBox(width: 12),
-                                const Icon(Icons.calendar_month_outlined, size: 14, color: Color(0xFF64748B)),
+                                const Icon(
+                                  Icons.calendar_month_outlined,
+                                  size: 14,
+                                  color: Color(0xFF64748B),
+                                ),
                                 const SizedBox(width: 4),
                                 Text(
-                                  DateFormat('dd/MM/yyyy').format(result.submittedAt),
-                                  style: theme.textTheme.bodyMedium?.copyWith(fontSize: 12),
+                                  DateFormat(
+                                    'dd/MM/yyyy',
+                                  ).format(result.submittedAt),
+                                  style: theme.textTheme.bodyMedium?.copyWith(
+                                    fontSize: 12,
+                                  ),
                                 ),
                               ],
                             ),
                           ],
                         ),
                       ),
-                      
+
                       // Right arrow decoration
-                      const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: Color(0xFF94A3B8)),
+                      const Icon(
+                        Icons.arrow_forward_ios_rounded,
+                        size: 16,
+                        color: Color(0xFF94A3B8),
+                      ),
                     ],
                   ),
                 ),
