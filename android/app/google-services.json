@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "838087878656",
+    "project_id": "testora-ee95f",
+    "storage_bucket": "testora-ee95f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:838087878656:android:8e20a0192fde808c5990e5",
+        "android_client_info": {
+          "package_name": "com.testora.app.testora"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAoP4St3o-x1Gvaqk635op4pJ9dOH7WIIQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

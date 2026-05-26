@@ -1,0 +1,436 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:easy_localization/easy_localization.dart';
+import 'package:go_router/go_router.dart';
+import '../providers/exam_provider.dart';
+import '../providers/timer_provider.dart';
+import '../../../core/themes/app_theme.dart';
+
+class TakeExamScreen extends ConsumerStatefulWidget {
+  final String examId;
+
+  const TakeExamScreen({super.key, required this.examId});
+
+  @override
+  ConsumerState<TakeExamScreen> createState() => _TakeExamScreenState();
+}
+
+class _TakeExamScreenState extends ConsumerState<TakeExamScreen> {
+  bool _started = false;
+
+  void _autoSubmit() async {
+    if (!mounted) return;
+    
+    // Automatically submit when timer hits zero
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Tempu remata! Entrega automatiku...'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+    
+    try {
+      final result = await ref.read(examSessionProvider.notifier).submit();
+      if (mounted) {
+        context.go('/result', extra: result);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(tr('error_occurred')),
+            backgroundColor: Colors.red,
+          ),
+        );
+        context.go('/home');
+      }
+    }
+  }
+
+  void _confirmSubmit() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(tr('submit')),
+        content: Text(tr('confirm_submit')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(tr('no')),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context); // Close dialog
+              _executeSubmit();
+            },
+            child: Text(tr('yes')),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _executeSubmit() async {
+    try {
+      final result = await ref.read(examSessionProvider.notifier).submit();
+      if (mounted) {
+        context.go('/result', extra: result);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(tr('error_occurred')),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  void _showExitConfirmation() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Sai husi Teste?'),
+        content: const Text('Ita boot sei lakon ita-boot nia resposta hotu se ita boot sai agora.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(tr('no')),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            onPressed: () {
+              ref.read(examTimerProvider.notifier).stop();
+              Navigator.pop(context); // Close dialog
+              context.go('/home');
+            },
+            child: const Text('Sai'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatTimer(int totalSeconds) {
+    final minutes = totalSeconds ~/ 60;
+    final seconds = totalSeconds % 60;
+    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final exams = ref.watch(activeExamsProvider).value;
+    final exam = exams?.firstWhere((e) => e.id == widget.examId, orElse: () => throw 'Exam not found');
+    final session = ref.watch(examSessionProvider);
+    final remainingTime = ref.watch(examTimerProvider);
+    final theme = Theme.of(context);
+
+    // Synchronously initialize the exam session once the exam data is ready
+    if (exam != null && !_started) {
+      _started = true;
+      Future.microtask(() {
+        ref.read(examSessionProvider.notifier).startSession(exam, _autoSubmit);
+      });
+    }
+
+    if (session == null || session.questions.isEmpty) {
+      return const Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('Load pergunta sira...'),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final currentQuestion = session.questions[session.currentIndex];
+    final progressPercentage = session.questions.isNotEmpty
+        ? (session.answers.length / session.questions.length)
+        : 0.0;
+
+    return PopScope(
+      canPop: false,
+      onPopInvoked: (didPop) {
+        if (didPop) return;
+        _showExitConfirmation();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(session.exam.title),
+          leading: IconButton(
+            icon: const Icon(Icons.close_rounded),
+            onPressed: _showExitConfirmation,
+          ),
+          actions: [
+            // Gorgeous glowing timer badge
+            Container(
+              margin: const EdgeInsets.only(right: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: remainingTime < 60
+                    ? Colors.red.withOpacity(0.15)
+                    : theme.colorScheme.primary.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: remainingTime < 60 ? Colors.red : theme.colorScheme.primary,
+                  width: 1.5,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.alarm_on_rounded,
+                    size: 16,
+                    color: remainingTime < 60 ? Colors.red : theme.colorScheme.primary,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    _formatTimer(remainingTime),
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: remainingTime < 60 ? Colors.red : theme.colorScheme.primary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        body: Stack(
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Progressive linear percentage progress bar
+                LinearProgressIndicator(
+                  value: progressPercentage,
+                  backgroundColor: const Color(0xFFE2E8F0),
+                  valueColor: AlwaysStoppedAnimation<Color>(theme.colorScheme.primary),
+                ),
+                const SizedBox(height: 8),
+
+                // Question index tracker
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        '${tr('question')} ${session.currentIndex + 1} / ${session.questions.length}',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF64748B),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE2E8F0),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          'Hatán: ${session.answers.length} / ${session.questions.length}',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF1E293B),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Interactive question workspace
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(20.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // Question Card
+                        Card(
+                          margin: EdgeInsets.zero,
+                          elevation: 1,
+                          child: Padding(
+                            padding: const EdgeInsets.all(20.0),
+                            child: Text(
+                              currentQuestion.questionText,
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                height: 1.5,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+
+                        // Options cards mapping
+                        ...List.generate(currentQuestion.options.length, (optIdx) {
+                          final optionText = currentQuestion.options[optIdx];
+                          final isSelected = session.answers[currentQuestion.id] == optIdx;
+
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 12.0),
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(16),
+                              onTap: () {
+                                ref.read(examSessionProvider.notifier).selectOption(
+                                      currentQuestion.id,
+                                      optIdx,
+                                    );
+                              },
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 150),
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: isSelected
+                                      ? theme.colorScheme.primary.withOpacity(0.06)
+                                      : Colors.white,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: isSelected
+                                        ? theme.colorScheme.primary
+                                        : const Color(0xFFE2E8F0),
+                                    width: isSelected ? 2.0 : 1.0,
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    // Radio circle design
+                                    Container(
+                                      height: 22,
+                                      width: 22,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: isSelected
+                                              ? theme.colorScheme.primary
+                                              : const Color(0xFF64748B),
+                                          width: isSelected ? 6.5 : 1.5,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                      child: Text(
+                                        optionText,
+                                        style: TextStyle(
+                                          fontSize: 15,
+                                          fontWeight:
+                                              isSelected ? FontWeight.bold : FontWeight.w500,
+                                          color: isSelected
+                                              ? theme.colorScheme.primary
+                                              : const Color(0xFF1E293B),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
+                        }),
+                      ],
+                    ),
+                  ),
+                ),
+
+                // Floating next/prev footer toolbar
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black12,
+                        blurRadius: 10,
+                        offset: Offset(0, -2),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      // Previous button
+                      TextButton.icon(
+                        onPressed: session.currentIndex > 0
+                            ? () => ref.read(examSessionProvider.notifier).previousQuestion()
+                            : null,
+                        icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 16),
+                        label: const Text('Kotuk'),
+                      ),
+
+                      // Submit button for last question or general shortcut
+                      if (session.currentIndex == session.questions.length - 1)
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.successColor,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                          icon: const Icon(Icons.check_circle_outline_rounded, size: 20),
+                          label: Text(tr('submit')),
+                          onPressed: _confirmSubmit,
+                        )
+                      else
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                          icon: const Icon(Icons.arrow_forward_ios_rounded, size: 16),
+                          label: const Text('Oin-husi'),
+                          onPressed: () => ref.read(examSessionProvider.notifier).nextQuestion(),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            
+            // Fullscreen loading overlay during submission
+            if (session.isSubmitting)
+              Container(
+                color: Colors.black.withOpacity(0.5),
+                child: Center(
+                  child: Card(
+                    margin: const EdgeInsets.symmetric(horizontal: 40),
+                    child: Padding(
+                      padding: const EdgeInsets.all(24.0),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const CircularProgressIndicator(),
+                          const SizedBox(height: 16),
+                          Text(
+                            tr('loading'),
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
