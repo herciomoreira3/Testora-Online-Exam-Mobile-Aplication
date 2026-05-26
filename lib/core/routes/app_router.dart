@@ -10,6 +10,8 @@ import '../../features/exam/presentation/take_exam_screen.dart';
 import '../../features/exam/presentation/result_screen.dart';
 import '../../features/history/presentation/history_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
+import '../../features/admin/presentation/admin_dashboard_screen.dart';
+import '../../features/professor/presentation/prof_dashboard_screen.dart';
 import '../../shared/models/result_model.dart';
 
 class GoRouterRefreshStream extends ChangeNotifier {
@@ -18,8 +20,8 @@ class GoRouterRefreshStream extends ChangeNotifier {
   GoRouterRefreshStream(Stream<dynamic> stream) {
     notifyListeners();
     _subscription = stream.asBroadcastStream().listen(
-          (dynamic _) => notifyListeners(),
-        );
+      (dynamic _) => notifyListeners(),
+    );
   }
 
   @override
@@ -32,6 +34,7 @@ class GoRouterRefreshStream extends ChangeNotifier {
 final appRouterProvider = Provider<GoRouter>((ref) {
   final authRepo = ref.watch(authRepositoryProvider);
   final authState = ref.watch(authStateProvider);
+  final userProfileAsync = ref.watch(userProfileProvider);
 
   return GoRouter(
     initialLocation: '/home',
@@ -49,16 +52,35 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       }
 
       if (isLoggingIn || isRegistering) {
+        // If user profile isn't ready yet, don't redirect so provider can load
+        final role = userProfileAsync.value?.role;
+        if (role == null) return null;
+
+        // Map role to landing routes (support legacy 'student')
+        if (role == 'admin') return '/admin-dashboard';
+        if (role == 'professores' || role.toLowerCase().contains('prof'))
+          return '/prof-dashboard';
         return '/home';
       }
 
+      // Protect admin/prof routes from estudiantes (students)
+      final currentPath = state.subloc;
+      final role = userProfileAsync.value?.role;
+      if (role != null) {
+        final isStudent =
+            !(role == 'admin' ||
+                role == 'professores' ||
+                role.toLowerCase().contains('prof'));
+        if (isStudent &&
+            (currentPath.startsWith('/admin') ||
+                currentPath.startsWith('/prof'))) {
+          return '/home';
+        }
+      }
       return null;
     },
     routes: [
-      GoRoute(
-        path: '/login',
-        builder: (context, state) => const LoginScreen(),
-      ),
+      GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
       GoRoute(
         path: '/register',
         builder: (context, state) => const RegisterScreen(),
@@ -88,6 +110,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/profile',
         builder: (context, state) => const ProfileScreen(),
+      ),
+      GoRoute(
+        path: '/admin-dashboard',
+        builder: (context, state) => const AdminDashboardScreen(),
+      ),
+      GoRoute(
+        path: '/prof-dashboard',
+        builder: (context, state) => const ProfDashboardScreen(),
       ),
     ],
   );
