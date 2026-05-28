@@ -1,0 +1,6 @@
+{
+  "name": "Testora",
+  "description": "Sistem Ujian Akademik Terpercaya yang Aman dan Adil (Secure and Fair Academic Examination System). Supports Student, Teacher, and Admin role workflows with complete multilingual translation and anti-cheat tracking.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
