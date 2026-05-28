@@ -22,10 +22,7 @@ class LoadingOverlay extends StatelessWidget {
       children: [
         child,
         // Block user interactions using ModalBarrier
-        const ModalBarrier(
-          dismissible: false,
-          color: Colors.black26,
-        ),
+        const ModalBarrier(dismissible: false, color: Colors.black26),
         // Visual indicator with blur
         Center(
           child: ClipRRect(
@@ -33,10 +30,13 @@ class LoadingOverlay extends StatelessWidget {
             child: BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 4, sigmaY: 4),
               child: Card(
-                color: Colors.white.withOpacity(0.9),
+                color: Colors.white.withValues(alpha: 0.9),
                 elevation: 4,
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 32.0, vertical: 24.0),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 32.0,
+                    vertical: 24.0,
+                  ),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [

@@ -1,19 +1,32 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../features/admin/presentation/admin_dashboard_screen.dart';
+import '../../features/admin/presentation/admin_exams_screen.dart';
+import '../../features/admin/presentation/admin_reports_screen.dart';
+import '../../features/admin/presentation/manage_subjects_screen.dart';
+import '../../features/admin/presentation/manage_users_screen.dart';
+import '../../features/alerts/presentation/alerts_screen.dart';
 import '../../features/auth/presentation/login_screen.dart';
 import '../../features/auth/presentation/register_screen.dart';
 import '../../features/auth/providers/auth_provider.dart';
 import '../../features/exam/presentation/list_exam_screen.dart';
-import '../../features/exam/presentation/take_exam_screen.dart';
 import '../../features/exam/presentation/result_screen.dart';
+import '../../features/exam/presentation/take_exam_screen.dart';
 import '../../features/history/presentation/history_screen.dart';
-import '../../features/profile/presentation/profile_screen.dart';
-import '../../features/admin/presentation/admin_dashboard_screen.dart';
-import '../../features/admin/presentation/manage_users_screen.dart';
+import '../../features/professor/presentation/create_exam_screen.dart';
+import '../../features/professor/presentation/manage_questions_screen.dart';
 import '../../features/professor/presentation/prof_dashboard_screen.dart';
+import '../../features/professor/presentation/teacher_results_screen.dart';
+import '../../features/professor/presentation/teacher_students_screen.dart';
+import '../../features/professor/presentation/view_results_screen.dart';
+import '../../features/profile/presentation/profile_screen.dart';
+import '../../features/splash/presentation/splash_screen.dart';
 import '../../shared/models/result_model.dart';
+import '../widgets/main_scaffold.dart';
 
 class GoRouterRefreshStream extends ChangeNotifier {
   late final StreamSubscription<dynamic> _subscription;
@@ -38,57 +51,67 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   final userProfileAsync = ref.watch(userProfileProvider);
 
   return GoRouter(
-    initialLocation: '/home',
+    initialLocation: '/splash',
     refreshListenable: GoRouterRefreshStream(authRepo.authStateChanges),
     redirect: (context, state) {
       final isLoggedIn = authState.value != null;
-      final isLoggingIn = state.matchedLocation == '/login';
-      final isRegistering = state.matchedLocation == '/register';
+      final location = state.matchedLocation;
+      final isSplash = location == '/splash';
+      final isLoggingIn = location == '/login';
+      final isRegistering = location == '/register';
+
+      if (isSplash) return null;
 
       if (!isLoggedIn) {
-        if (!isLoggingIn && !isRegistering) {
-          return '/login';
-        }
+        if (!isLoggingIn && !isRegistering) return '/login';
         return null;
       }
 
       if (isLoggingIn || isRegistering) {
-        // If user profile isn't ready yet, don't redirect so provider can load
         final role = userProfileAsync.value?.role;
         if (role == null) return null;
-
-        // Map role to landing routes (support legacy 'student')
         if (role == 'admin') return '/admin-dashboard';
-        if (role == 'professores' || role.toLowerCase().contains('prof'))
-          return '/prof-dashboard';
+        if (role == 'teacher') return '/prof-dashboard';
         return '/home';
       }
 
-      // Protect admin/prof routes from estudiantes (students)
-      final currentPath = state.subloc;
       final role = userProfileAsync.value?.role;
       if (role != null) {
-        final isStudent =
-            !(role == 'admin' ||
-                role == 'professores' ||
-                role.toLowerCase().contains('prof'));
+        final isAdmin = role == 'admin';
+        final isTeacher = role == 'teacher';
+        final isStudent = !(isAdmin || isTeacher);
+
         if (isStudent &&
-            (currentPath.startsWith('/admin') ||
-                currentPath.startsWith('/prof'))) {
+            (location.startsWith('/admin') || location.startsWith('/prof'))) {
           return '/home';
         }
+
+        if (isTeacher &&
+            (location == '/home' ||
+                location.startsWith('/history') ||
+                location.startsWith('/admin'))) {
+          return '/prof-dashboard';
+        }
+
+        if (isAdmin &&
+            (location == '/home' ||
+                location.startsWith('/history') ||
+                location.startsWith('/prof'))) {
+          return '/admin-dashboard';
+        }
       }
+
       return null;
     },
     routes: [
+      GoRoute(
+        path: '/splash',
+        builder: (context, state) => const SplashScreen(),
+      ),
       GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
       GoRoute(
         path: '/register',
         builder: (context, state) => const RegisterScreen(),
-      ),
-      GoRoute(
-        path: '/home',
-        builder: (context, state) => const ListExamScreen(),
       ),
       GoRoute(
         path: '/take-exam/:id',
@@ -105,24 +128,107 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         },
       ),
       GoRoute(
-        path: '/history',
-        builder: (context, state) => const HistoryScreen(),
-      ),
-      GoRoute(
         path: '/profile',
         builder: (context, state) => const ProfileScreen(),
       ),
-      GoRoute(
-        path: '/admin-dashboard',
-        builder: (context, state) => const AdminDashboardScreen(),
-      ),
-      GoRoute(
-        path: '/admin/manage-users',
-        builder: (context, state) => const ManageUsersScreen(),
-      ),
-      GoRoute(
-        path: '/prof-dashboard',
-        builder: (context, state) => const ProfDashboardScreen(),
+      ShellRoute(
+        builder: (context, state, child) => MainScaffold(child: child),
+        routes: [
+          GoRoute(
+            path: '/home',
+            builder: (context, state) => const ListExamScreen(),
+          ),
+          GoRoute(
+            path: '/history',
+            builder: (context, state) => const HistoryScreen(),
+          ),
+          GoRoute(
+            path: '/alerts',
+            builder: (context, state) => const AlertsScreen(),
+          ),
+          GoRoute(
+            path: '/admin-dashboard',
+            builder: (context, state) => const AdminDashboardScreen(),
+          ),
+          GoRoute(
+            path: '/admin/manage-users',
+            builder: (context, state) => const ManageUsersScreen(),
+          ),
+          GoRoute(
+            path: '/admin/manage-subjects',
+            builder: (context, state) => const ManageSubjectsScreen(),
+          ),
+          GoRoute(
+            path: '/admin/exams',
+            builder: (context, state) => const AdminExamsScreen(),
+          ),
+          GoRoute(
+            path: '/admin/exams/create',
+            builder: (context, state) => const CreateExamScreen(),
+          ),
+          GoRoute(
+            path: '/admin/exams/:examId/edit',
+            builder: (context, state) {
+              final examId = state.pathParameters['examId']!;
+              return CreateExamScreen(examId: examId);
+            },
+          ),
+          GoRoute(
+            path: '/admin/exams/:examId/manage-questions',
+            builder: (context, state) {
+              final examId = state.pathParameters['examId']!;
+              return ManageQuestionsScreen(examId: examId);
+            },
+          ),
+          GoRoute(
+            path: '/admin/exams/:examId/results',
+            builder: (context, state) {
+              final examId = state.pathParameters['examId']!;
+              return ViewResultsScreen(examId: examId);
+            },
+          ),
+          GoRoute(
+            path: '/admin/reports',
+            builder: (context, state) => const AdminReportsScreen(),
+          ),
+          GoRoute(
+            path: '/prof-dashboard',
+            builder: (context, state) => const ProfDashboardScreen(),
+          ),
+          GoRoute(
+            path: '/prof-dashboard/students',
+            builder: (context, state) => const TeacherStudentsScreen(),
+          ),
+          GoRoute(
+            path: '/prof-dashboard/results',
+            builder: (context, state) => const TeacherResultsScreen(),
+          ),
+          GoRoute(
+            path: '/prof-dashboard/create-exam',
+            builder: (context, state) => const CreateExamScreen(),
+          ),
+          GoRoute(
+            path: '/prof-dashboard/exam/:examId/edit',
+            builder: (context, state) {
+              final examId = state.pathParameters['examId']!;
+              return CreateExamScreen(examId: examId);
+            },
+          ),
+          GoRoute(
+            path: '/prof-dashboard/exam/:examId/manage-questions',
+            builder: (context, state) {
+              final examId = state.pathParameters['examId']!;
+              return ManageQuestionsScreen(examId: examId);
+            },
+          ),
+          GoRoute(
+            path: '/prof-dashboard/exam/:examId/results',
+            builder: (context, state) {
+              final examId = state.pathParameters['examId']!;
+              return ViewResultsScreen(examId: examId);
+            },
+          ),
+        ],
       ),
     ],
   );

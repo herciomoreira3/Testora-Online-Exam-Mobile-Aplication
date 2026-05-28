@@ -66,5 +66,19 @@
   "is_active": "Teste Ativu",
   "change_role": "Muda Papél"
   ,
-  "professores": "Professor"
+  "professores": "Professor",
+  "total_teachers": "Total Mestre",
+  "total_subjects": "Total Materia",
+  "alerts": "Alerta",
+  "no_alerts": "La iha alerta foun.",
+  "mark_as_read": "Marka hanesan lee ona",
+  "publish": "Publish",
+  "published": "Publika ona",
+  "draft": "Draft",
+  "publish_exam": "Publish Ujian",
+  "publish_exam_confirm": "Publish ujian ne'e no haruka alerta ba mestre no estudante ne'ebe assign ona?",
+  "exam_published": "Ujian publish ona. Alerta kria ona.",
+  "exam_already_published": "Ujian ne'e publish ona.",
+  "publish_requires_questions": "Aumenta pergunta molok publish ujian ne'e.",
+  "notification_before_exam": "Reminder molok ujian"
 }

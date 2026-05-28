@@ -1,7 +1,12 @@
+import 'dart:convert';
+
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:go_router/go_router.dart';
+import '../../auth/providers/auth_provider.dart';
 import '../providers/exam_provider.dart';
 import '../providers/timer_provider.dart';
 import '../../../core/themes/app_theme.dart';
@@ -15,20 +20,73 @@ class TakeExamScreen extends ConsumerStatefulWidget {
   ConsumerState<TakeExamScreen> createState() => _TakeExamScreenState();
 }
 
-class _TakeExamScreenState extends ConsumerState<TakeExamScreen> {
+class _TakeExamScreenState extends ConsumerState<TakeExamScreen>
+    with WidgetsBindingObserver {
   bool _started = false;
+  bool _isAutoSubmitting = false;
+  String? _blockMessageKey;
 
-  void _autoSubmit() async {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final session = ref.read(examSessionProvider);
+    if (session == null || !session.exam.antiCheatEnabled || _isAutoSubmitting) {
+      return;
+    }
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      _handleAntiCheatViolation(state.name);
+    }
+  }
+
+  Future<void> _handleAntiCheatViolation(String lifecycleState) async {
+    if (_isAutoSubmitting) return;
+    _isAutoSubmitting = true;
+    final session = ref.read(examSessionProvider);
+    final userId = ref.read(authRepositoryProvider).currentUid;
+
+    if (session != null) {
+      try {
+        await FirebaseFirestore.instance.collection('exam_logs').add({
+          'examId': session.exam.id,
+          'examTitle': session.exam.title,
+          'studentId': userId,
+          'userId': userId,
+          'type': 'app_switch',
+          'message': 'Student left exam screen: $lifecycleState',
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      } catch (_) {
+        // Submission must still continue even if the audit log cannot be saved.
+      }
+    }
+
     if (!mounted) return;
-    
-    // Automatically submit when timer hits zero
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Tempu remata! Entrega automatiku...'),
+      SnackBar(
+        content: Text(tr('anti_cheat_violation')),
+        backgroundColor: Colors.red,
         behavior: SnackBarBehavior.floating,
       ),
     );
-    
+    await _submitAndNavigate();
+  }
+
+  Future<void> _submitAndNavigate() async {
     try {
       final result = await ref.read(examSessionProvider.notifier).submit();
       if (mounted) {
@@ -45,6 +103,45 @@ class _TakeExamScreenState extends ConsumerState<TakeExamScreen> {
         context.go('/home');
       }
     }
+  }
+
+  Future<void> _startExamIfAllowed(dynamic exam) async {
+    final now = DateTime.now();
+    if (now.isBefore(exam.startTime)) {
+      setState(() => _blockMessageKey = 'exam_not_started');
+      return;
+    }
+    if (now.isAfter(exam.endTime)) {
+      setState(() => _blockMessageKey = 'exam_expired');
+      return;
+    }
+    final userId = ref.read(authRepositoryProvider).currentUid;
+    if (userId == null) {
+      setState(() => _blockMessageKey = 'auth_failed');
+      return;
+    }
+    final submitted = await ref
+        .read(examRepositoryProvider)
+        .hasStudentSubmittedExam(userId, exam.id);
+    if (submitted) {
+      setState(() => _blockMessageKey = 'exam_already_submitted');
+      return;
+    }
+    await ref.read(examSessionProvider.notifier).startSession(exam, _autoSubmit);
+  }
+
+  void _autoSubmit() async {
+    if (!mounted) return;
+
+    // Automatically submit when timer hits zero
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Tempu remata! Entrega automatiku...'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+
+    await _submitAndNavigate();
   }
 
   void _confirmSubmit() {
@@ -71,21 +168,7 @@ class _TakeExamScreenState extends ConsumerState<TakeExamScreen> {
   }
 
   void _executeSubmit() async {
-    try {
-      final result = await ref.read(examSessionProvider.notifier).submit();
-      if (mounted) {
-        context.go('/result', extra: result);
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(tr('error_occurred')),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
+    await _submitAndNavigate();
   }
 
   void _showExitConfirmation() {
@@ -93,14 +176,19 @@ class _TakeExamScreenState extends ConsumerState<TakeExamScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Sai husi Teste?'),
-        content: const Text('Ita boot sei lakon ita-boot nia resposta hotu se ita boot sai agora.'),
+        content: const Text(
+          'Ita boot sei lakon ita-boot nia resposta hotu se ita boot sai agora.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: Text(tr('no')),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
             onPressed: () {
               ref.read(examTimerProvider.notifier).stop();
               Navigator.pop(context); // Close dialog
@@ -119,10 +207,40 @@ class _TakeExamScreenState extends ConsumerState<TakeExamScreen> {
     return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
 
+  Widget _questionImage(dynamic question) {
+    if (question.imageUrl != null && question.imageUrl!.isNotEmpty) {
+      return Image.network(
+        question.imageUrl!,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => _imageError(),
+      );
+    }
+    if (question.imageData != null && question.imageData!.isNotEmpty) {
+      return Image.memory(
+        base64Decode(question.imageData!),
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => _imageError(),
+      );
+    }
+    return const SizedBox.shrink();
+  }
+
+  Widget _imageError() {
+    return Container(
+      height: 120,
+      alignment: Alignment.center,
+      color: const Color(0xFFF1F5F9),
+      child: Text(tr('image_load_failed')),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final exams = ref.watch(activeExamsProvider).value;
-    final exam = exams?.firstWhere((e) => e.id == widget.examId, orElse: () => throw 'Exam not found');
+    final exam = exams?.firstWhere(
+      (e) => e.id == widget.examId,
+      orElse: () => throw 'Exam not found',
+    );
     final session = ref.watch(examSessionProvider);
     final remainingTime = ref.watch(examTimerProvider);
     final theme = Theme.of(context);
@@ -131,8 +249,36 @@ class _TakeExamScreenState extends ConsumerState<TakeExamScreen> {
     if (exam != null && !_started) {
       _started = true;
       Future.microtask(() {
-        ref.read(examSessionProvider.notifier).startSession(exam, _autoSubmit);
+        _startExamIfAllowed(exam);
       });
+    }
+
+    if (_blockMessageKey != null) {
+      return Scaffold(
+        appBar: AppBar(title: Text(tr('app_name'))),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.lock_clock, size: 56),
+                const SizedBox(height: 14),
+                Text(
+                  tr(_blockMessageKey!),
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.titleMedium,
+                ),
+                const SizedBox(height: 18),
+                ElevatedButton(
+                  onPressed: () => context.go('/home'),
+                  child: Text(tr('home')),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
     }
 
     if (session == null || session.questions.isEmpty) {
@@ -157,7 +303,7 @@ class _TakeExamScreenState extends ConsumerState<TakeExamScreen> {
 
     return PopScope(
       canPop: false,
-      onPopInvoked: (didPop) {
+      onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
         _showExitConfirmation();
       },
@@ -175,11 +321,13 @@ class _TakeExamScreenState extends ConsumerState<TakeExamScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
                 color: remainingTime < 60
-                    ? Colors.red.withOpacity(0.15)
-                    : theme.colorScheme.primary.withOpacity(0.1),
+                    ? Colors.red.withValues(alpha: 0.15)
+                    : theme.colorScheme.primary.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
-                  color: remainingTime < 60 ? Colors.red : theme.colorScheme.primary,
+                  color: remainingTime < 60
+                      ? Colors.red
+                      : theme.colorScheme.primary,
                   width: 1.5,
                 ),
               ),
@@ -189,7 +337,9 @@ class _TakeExamScreenState extends ConsumerState<TakeExamScreen> {
                   Icon(
                     Icons.alarm_on_rounded,
                     size: 16,
-                    color: remainingTime < 60 ? Colors.red : theme.colorScheme.primary,
+                    color: remainingTime < 60
+                        ? Colors.red
+                        : theme.colorScheme.primary,
                   ),
                   const SizedBox(width: 6),
                   Text(
@@ -197,7 +347,9 @@ class _TakeExamScreenState extends ConsumerState<TakeExamScreen> {
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
-                      color: remainingTime < 60 ? Colors.red : theme.colorScheme.primary,
+                      color: remainingTime < 60
+                          ? Colors.red
+                          : theme.colorScheme.primary,
                     ),
                   ),
                 ],
@@ -214,13 +366,18 @@ class _TakeExamScreenState extends ConsumerState<TakeExamScreen> {
                 LinearProgressIndicator(
                   value: progressPercentage,
                   backgroundColor: const Color(0xFFE2E8F0),
-                  valueColor: AlwaysStoppedAnimation<Color>(theme.colorScheme.primary),
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    theme.colorScheme.primary,
+                  ),
                 ),
                 const SizedBox(height: 8),
 
                 // Question index tracker
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20.0,
+                    vertical: 8.0,
+                  ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -233,13 +390,16 @@ class _TakeExamScreenState extends ConsumerState<TakeExamScreen> {
                         ),
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
                           color: const Color(0xFFE2E8F0),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
-                          'Hatán: ${session.answers.length} / ${session.questions.length}',
+                          'Hatan: ${session.answers.length} / ${session.questions.length}',
                           style: const TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
@@ -264,38 +424,59 @@ class _TakeExamScreenState extends ConsumerState<TakeExamScreen> {
                           elevation: 1,
                           child: Padding(
                             padding: const EdgeInsets.all(20.0),
-                            child: Text(
-                              currentQuestion.questionText,
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                height: 1.5,
-                                fontSize: 16,
-                              ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                if ((currentQuestion.imageUrl != null &&
+                                        currentQuestion.imageUrl!.isNotEmpty) ||
+                                    (currentQuestion.imageData != null &&
+                                        currentQuestion
+                                            .imageData!
+                                            .isNotEmpty)) ...[
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(16),
+                                    child: _questionImage(currentQuestion),
+                                  ),
+                                  const SizedBox(height: 16),
+                                ],
+                                Text(
+                                  currentQuestion.questionText,
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    height: 1.5,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
                         const SizedBox(height: 24),
 
                         // Options cards mapping
-                        ...List.generate(currentQuestion.options.length, (optIdx) {
+                        ...List.generate(currentQuestion.options.length, (
+                          optIdx,
+                        ) {
                           final optionText = currentQuestion.options[optIdx];
-                          final isSelected = session.answers[currentQuestion.id] == optIdx;
+                          final isSelected =
+                              session.answers[currentQuestion.id] == optIdx;
 
                           return Padding(
                             padding: const EdgeInsets.only(bottom: 12.0),
                             child: InkWell(
                               borderRadius: BorderRadius.circular(16),
                               onTap: () {
-                                ref.read(examSessionProvider.notifier).selectOption(
-                                      currentQuestion.id,
-                                      optIdx,
-                                    );
+                                ref
+                                    .read(examSessionProvider.notifier)
+                                    .selectOption(currentQuestion.id, optIdx);
                               },
                               child: AnimatedContainer(
                                 duration: const Duration(milliseconds: 150),
                                 padding: const EdgeInsets.all(16),
                                 decoration: BoxDecoration(
                                   color: isSelected
-                                      ? theme.colorScheme.primary.withOpacity(0.06)
+                                      ? theme.colorScheme.primary.withValues(
+                                          alpha: 0.06,
+                                        )
                                       : Colors.white,
                                   borderRadius: BorderRadius.circular(16),
                                   border: Border.all(
@@ -327,8 +508,9 @@ class _TakeExamScreenState extends ConsumerState<TakeExamScreen> {
                                         optionText,
                                         style: TextStyle(
                                           fontSize: 15,
-                                          fontWeight:
-                                              isSelected ? FontWeight.bold : FontWeight.w500,
+                                          fontWeight: isSelected
+                                              ? FontWeight.bold
+                                              : FontWeight.w500,
                                           color: isSelected
                                               ? theme.colorScheme.primary
                                               : const Color(0xFF1E293B),
@@ -348,7 +530,10 @@ class _TakeExamScreenState extends ConsumerState<TakeExamScreen> {
 
                 // Floating next/prev footer toolbar
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 16,
+                  ),
                   decoration: const BoxDecoration(
                     color: Colors.white,
                     boxShadow: [
@@ -365,9 +550,14 @@ class _TakeExamScreenState extends ConsumerState<TakeExamScreen> {
                       // Previous button
                       TextButton.icon(
                         onPressed: session.currentIndex > 0
-                            ? () => ref.read(examSessionProvider.notifier).previousQuestion()
+                            ? () => ref
+                                  .read(examSessionProvider.notifier)
+                                  .previousQuestion()
                             : null,
-                        icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 16),
+                        icon: const Icon(
+                          Icons.arrow_back_ios_new_rounded,
+                          size: 16,
+                        ),
                         label: const Text('Kotuk'),
                       ),
 
@@ -377,37 +567,51 @@ class _TakeExamScreenState extends ConsumerState<TakeExamScreen> {
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppTheme.successColor,
                             foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 24,
+                              vertical: 12,
+                            ),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(10),
                             ),
                           ),
-                          icon: const Icon(Icons.check_circle_outline_rounded, size: 20),
+                          icon: const Icon(
+                            Icons.check_circle_outline_rounded,
+                            size: 20,
+                          ),
                           label: Text(tr('submit')),
                           onPressed: _confirmSubmit,
                         )
                       else
                         ElevatedButton.icon(
                           style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 24,
+                              vertical: 12,
+                            ),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(10),
                             ),
                           ),
-                          icon: const Icon(Icons.arrow_forward_ios_rounded, size: 16),
+                          icon: const Icon(
+                            Icons.arrow_forward_ios_rounded,
+                            size: 16,
+                          ),
                           label: const Text('Oin-husi'),
-                          onPressed: () => ref.read(examSessionProvider.notifier).nextQuestion(),
+                          onPressed: () => ref
+                              .read(examSessionProvider.notifier)
+                              .nextQuestion(),
                         ),
                     ],
                   ),
                 ),
               ],
             ),
-            
+
             // Fullscreen loading overlay during submission
             if (session.isSubmitting)
               Container(
-                color: Colors.black.withOpacity(0.5),
+                color: Colors.black.withValues(alpha: 0.5),
                 child: Center(
                   child: Card(
                     margin: const EdgeInsets.symmetric(horizontal: 40),

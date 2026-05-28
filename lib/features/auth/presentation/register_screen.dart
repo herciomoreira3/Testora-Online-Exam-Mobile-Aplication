@@ -20,6 +20,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _schoolController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  String _selectedRole = 'student';
   bool _obscurePassword = true;
 
   @override
@@ -41,6 +42,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           password: _passwordController.text,
           name: _nameController.text,
           school: _schoolController.text,
+          role: _selectedRole,
         );
 
     if (mounted && !success) {
@@ -101,7 +103,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
                     Card(
                       elevation: 4,
-                      shadowColor: theme.colorScheme.primary.withOpacity(0.1),
+                      shadowColor: theme.colorScheme.primary.withValues(alpha: 0.1),
                       child: Padding(
                         padding: const EdgeInsets.all(20.0),
                         child: Column(
@@ -146,6 +148,29 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                                 return null;
                               },
                             ),
+                            DropdownButtonFormField<String>(
+                              initialValue: _selectedRole,
+                              decoration: InputDecoration(
+                                labelText: tr('role'),
+                                prefixIcon: const Icon(Icons.badge_outlined),
+                              ),
+                              items: [
+                                DropdownMenuItem(
+                                  value: 'student',
+                                  child: Text(tr('student')),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'teacher',
+                                  child: Text(tr('teacher')),
+                                ),
+                              ],
+                              onChanged: (value) {
+                                if (value != null) {
+                                  setState(() => _selectedRole = value);
+                                }
+                              },
+                            ),
+                            const SizedBox(height: 12),
                             CustomTextField(
                               controller: _passwordController,
                               labelText: tr('password'),
