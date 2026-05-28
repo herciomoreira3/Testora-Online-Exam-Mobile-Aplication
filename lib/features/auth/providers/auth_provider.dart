@@ -38,11 +38,29 @@ class AuthController extends Notifier<AsyncValue<void>> {
     }
   }
 
+  Future<bool> loginWithGoogle({
+    required Future<bool> Function(String email) confirmAgreement,
+  }) async {
+    state = const AsyncLoading();
+    try {
+      await ref
+          .read(authRepositoryProvider)
+          .signInWithGoogle(confirmAgreement: confirmAgreement);
+      ref.invalidate(userProfileProvider);
+      state = const AsyncData(null);
+      return true;
+    } catch (e, st) {
+      state = AsyncError(e.toString(), st);
+      return false;
+    }
+  }
+
   Future<bool> register({
     required String email,
     required String password,
     required String name,
     required String school,
+    required String role,
   }) async {
     state = const AsyncLoading();
     try {
@@ -53,6 +71,7 @@ class AuthController extends Notifier<AsyncValue<void>> {
             password: password,
             name: name,
             school: school,
+            role: role,
           );
       // Force refreshing the userProfileProvider
       ref.invalidate(userProfileProvider);

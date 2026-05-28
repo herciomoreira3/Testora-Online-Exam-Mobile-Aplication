@@ -39,7 +39,8 @@ class ResultModel {
       if (map['submittedAt'] is Timestamp) {
         parsedDate = (map['submittedAt'] as Timestamp).toDate();
       } else {
-        parsedDate = DateTime.tryParse(map['submittedAt'].toString()) ?? DateTime.now();
+        parsedDate =
+            DateTime.tryParse(map['submittedAt'].toString()) ?? DateTime.now();
       }
     } else {
       parsedDate = DateTime.now();

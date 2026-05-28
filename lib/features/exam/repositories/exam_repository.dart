@@ -13,10 +13,13 @@ class ExamRepository {
         .where('isActive', isEqualTo: true)
         .snapshots()
         .map((snapshot) {
-      return snapshot.docs.map((doc) {
-        return ExamModel.fromMap(doc.data(), doc.id);
-      }).toList();
-    });
+          final exams = snapshot.docs
+              .map((doc) => ExamModel.fromMap(doc.data(), doc.id))
+              .where((exam) => exam.published)
+              .toList();
+          exams.sort((a, b) => a.startTime.compareTo(b.startTime));
+          return exams;
+        });
   }
 
   // Fetch all questions under exams/{examId}/questions subcollection
@@ -50,12 +53,40 @@ class ExamRepository {
     return _firestore
         .collection('user_exam_results')
         .where('userId', isEqualTo: userId)
-        .orderBy('submittedAt', descending: true)
         .snapshots()
         .map((snapshot) {
-      return snapshot.docs.map((doc) {
-        return ResultModel.fromMap(doc.data(), doc.id);
-      }).toList();
-    });
+          final results = snapshot.docs.map((doc) {
+            return ResultModel.fromMap(doc.data(), doc.id);
+          }).toList();
+          results.sort((a, b) => b.submittedAt.compareTo(a.submittedAt));
+          return results;
+        });
   }
+
+  Future<bool> hasStudentSubmittedExam(String userId, String examId) async {
+    final snapshot = await _firestore
+        .collection('user_exam_results')
+        .where('userId', isEqualTo: userId)
+        .where('examId', isEqualTo: examId)
+        .limit(1)
+        .get();
+    return snapshot.docs.isNotEmpty;
+  }
+
+  // Fetch exam results for a specific exam (all students)
+  Stream<List<ResultModel>> getResultsForExam(String examId) {
+    return _firestore
+        .collection('user_exam_results')
+        .where('examId', isEqualTo: examId)
+        .snapshots()
+        .map((snapshot) {
+          final results = snapshot.docs
+              .map((doc) => ResultModel.fromMap(doc.data(), doc.id))
+              .toList();
+          results.sort((a, b) => b.submittedAt.compareTo(a.submittedAt));
+          return results;
+        });
+  }
+
+  // existing method continues
 }

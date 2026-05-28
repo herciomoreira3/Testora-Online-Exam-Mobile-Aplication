@@ -12,7 +12,20 @@
           "package_name": "com.testora.app.testora"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "838087878656-1uabafks1u44akun01qnuomk2smmn8sn.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.testora.app.testora",
+            "certificate_hash": "a9d588dbdf6a5863c43078e213e6804b1da02a2d"
+          }
+        },
+        {
+          "client_id": "838087878656-npvns7hkqi9hb2ctmipf78k2miuq7fqs.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyAoP4St3o-x1Gvaqk635op4pJ9dOH7WIIQ"
@@ -20,7 +33,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "838087878656-npvns7hkqi9hb2ctmipf78k2miuq7fqs.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "838087878656-68afj726p2on59e3s83bul52f3oeb3r0.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.testora.app.testora"
+              }
+            }
+          ]
         }
       }
     }

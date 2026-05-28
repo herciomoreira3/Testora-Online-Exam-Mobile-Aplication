@@ -1,5 +1,9 @@
 class Validators {
-  static String? validateEmail(String? value, String emptyError, String invalidError) {
+  static String? validateEmail(
+    String? value,
+    String emptyError,
+    String invalidError,
+  ) {
     if (value == null || value.trim().isEmpty) {
       return emptyError;
     }
@@ -10,7 +14,11 @@ class Validators {
     return null;
   }
 
-  static String? validatePassword(String? value, String emptyError, String minLengthError) {
+  static String? validatePassword(
+    String? value,
+    String emptyError,
+    String minLengthError,
+  ) {
     if (value == null || value.isEmpty) {
       return emptyError;
     }

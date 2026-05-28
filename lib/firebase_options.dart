@@ -34,5 +34,4 @@ class DefaultFirebaseOptions {
     storageBucket: 'testora-ee95f.firebasestorage.app',
     iosBundleId: 'com.testora.app.testora',
   );
-
 }

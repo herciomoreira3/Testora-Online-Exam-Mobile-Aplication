@@ -1,7 +1,8 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:easy_localization/easy_localization.dart';
 import 'package:go_router/go_router.dart';
+
 import '../../../shared/widgets/custom_button.dart';
 import '../../../shared/widgets/custom_textfield.dart';
 import '../../../shared/widgets/loading_overlay.dart';
@@ -27,25 +28,91 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     super.dispose();
   }
 
-  void _handleLogin() async {
+  Future<void> _routeToDashboard() async {
+    final user = await ref.read(userProfileProvider.future);
+    if (!mounted) return;
+    final role = user?.role ?? '';
+    if (role == 'admin') {
+      context.go('/admin-dashboard');
+    } else if (role == 'teacher') {
+      context.go('/prof-dashboard');
+    } else if (role == 'student') {
+      context.go('/home');
+    } else {
+      await ref.read(authControllerProvider.notifier).logout();
+      _showError('account_not_approved');
+    }
+  }
+
+  Future<void> _handleLogin() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final success = await ref.read(authControllerProvider.notifier).login(
-          _emailController.text,
-          _passwordController.text,
-        );
+    final success = await ref
+        .read(authControllerProvider.notifier)
+        .login(_emailController.text, _passwordController.text);
 
-    if (mounted && !success) {
-      final state = ref.read(authControllerProvider);
-      final errorKey = state.error?.toString() ?? 'error_occurred';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(tr(errorKey)),
-          backgroundColor: Theme.of(context).colorScheme.error,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+    if (!mounted) return;
+    if (success) {
+      await _routeToDashboard();
+    } else {
+      _showControllerError();
     }
+  }
+
+  Future<void> _handleGoogleLogin() async {
+    final success = await ref
+        .read(authControllerProvider.notifier)
+        .loginWithGoogle(confirmAgreement: _showAgreementDialog);
+
+    if (!mounted) return;
+    if (success) {
+      await _routeToDashboard();
+    } else {
+      _showControllerError();
+    }
+  }
+
+  Future<bool> _showAgreementDialog(String email) async {
+    if (!mounted) return false;
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(tr('agreement_title')),
+          content: Text(
+            '${tr('agreement_message')}\n\n${tr('email')}: $email',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(tr('no')),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: Text(tr('yes')),
+            ),
+          ],
+        );
+      },
+    );
+    return result == true;
+  }
+
+  void _showControllerError() {
+    final state = ref.read(authControllerProvider);
+    final errorKey = state.error?.toString() ?? 'error_occurred';
+    _showError(errorKey);
+  }
+
+  void _showError(String errorKey) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(tr(errorKey)),
+        backgroundColor: Theme.of(context).colorScheme.error,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   @override
@@ -54,124 +121,157 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final theme = Theme.of(context);
 
     return Scaffold(
+      backgroundColor: const Color(0xFFF7F9FC),
       body: LoadingOverlay(
         isLoading: authState.isLoading,
         child: SafeArea(
           child: Center(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24.0),
-              child: Form(
-                key: _formKey,
+              padding: const EdgeInsets.all(24),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 460),
                 child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // Premium Logo/Header section
-                  Icon(
-                    Icons.school_rounded,
-                    size: 80,
-                    color: theme.colorScheme.primary,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    tr('app_name'),
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.titleLarge?.copyWith(
-                      fontSize: 32,
-                      letterSpacing: 1.5,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Icon(
+                      Icons.school_rounded,
+                      size: 82,
                       color: theme.colorScheme.primary,
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Fasilita ita-boot nia ezame online ho lian Tetun.',
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.bodyMedium,
-                  ),
-                  const SizedBox(height: 36),
-
-                  // Input Card
-                  Card(
-                    elevation: 4,
-                    shadowColor: theme.colorScheme.primary.withOpacity(0.1),
-                    child: Padding(
-                      padding: const EdgeInsets.all(20.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Text(
-                            tr('login'),
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontSize: 20,
-                              color: theme.colorScheme.primary,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          CustomTextField(
-                            controller: _emailController,
-                            labelText: tr('email'),
-                            hintText: 'exemplo@email.com',
-                            prefixIcon: Icons.email_outlined,
-                            keyboardType: TextInputType.emailAddress,
-                            validator: (val) {
-                              if (val == null || val.isEmpty || !val.contains('@')) {
-                                return tr('invalid_email');
-                              }
-                              return null;
-                            },
-                          ),
-                          CustomTextField(
-                            controller: _passwordController,
-                            labelText: tr('password'),
-                            hintText: '******',
-                            prefixIcon: Icons.lock_outline_rounded,
-                            obscureText: _obscurePassword,
-                            suffixIcon: IconButton(
-                              icon: Icon(
-                                _obscurePassword
-                                    ? Icons.visibility_off_outlined
-                                    : Icons.visibility_outlined,
-                                color: const Color(0xFF64748B),
-                              ),
-                              onPressed: () {
-                                setState(() {
-                                  _obscurePassword = !_obscurePassword;
-                                });
-                              },
-                            ),
-                            validator: (val) {
-                              if (val == null || val.length < 6) {
-                                return tr('invalid_password');
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 24),
-                          CustomButton(
-                            text: tr('login'),
-                            isLoading: authState.isLoading,
-                            onPressed: _handleLogin,
+                    const SizedBox(height: 16),
+                    Text(
+                      tr('app_name'),
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.headlineMedium?.copyWith(
+                        color: theme.colorScheme.primary,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      tr('auth_tagline'),
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: const Color(0xFF64748B),
+                      ),
+                    ),
+                    const SizedBox(height: 32),
+                    Container(
+                      padding: const EdgeInsets.all(22),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Color(0x140F172A),
+                            blurRadius: 24,
+                            offset: Offset(0, 14),
                           ),
                         ],
                       ),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Register Route link
-                  TextButton(
-                    onPressed: () => context.push('/register'),
-                    child: Text(
-                      tr('donot_have_account'),
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: theme.colorScheme.primary,
-                        fontWeight: FontWeight.bold,
+                      child: Form(
+                        key: _formKey,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              tr('login_title'),
+                              style: theme.textTheme.titleLarge?.copyWith(
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              tr('login_hint'),
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: const Color(0xFF64748B),
+                              ),
+                            ),
+                            const SizedBox(height: 22),
+                            CustomTextField(
+                              controller: _emailController,
+                              labelText: tr('email'),
+                              hintText: 'exemplo@email.com',
+                              prefixIcon: Icons.email_outlined,
+                              keyboardType: TextInputType.emailAddress,
+                              validator: (val) {
+                                if (val == null ||
+                                    val.isEmpty ||
+                                    !val.contains('@')) {
+                                  return tr('invalid_email');
+                                }
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 16),
+                            CustomTextField(
+                              controller: _passwordController,
+                              labelText: tr('password'),
+                              hintText: '******',
+                              prefixIcon: Icons.lock_outline_rounded,
+                              obscureText: _obscurePassword,
+                              suffixIcon: IconButton(
+                                icon: Icon(
+                                  _obscurePassword
+                                      ? Icons.visibility_off_outlined
+                                      : Icons.visibility_outlined,
+                                  color: const Color(0xFF64748B),
+                                ),
+                                onPressed: () => setState(
+                                  () => _obscurePassword = !_obscurePassword,
+                                ),
+                              ),
+                              validator: (val) {
+                                if (val == null || val.length < 6) {
+                                  return tr('invalid_password');
+                                }
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 10),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: TextButton(
+                                onPressed: () {},
+                                child: Text(tr('forgot_password')),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            CustomButton(
+                              text: tr('login'),
+                              isLoading: authState.isLoading,
+                              onPressed: _handleLogin,
+                            ),
+                            const SizedBox(height: 14),
+                            OutlinedButton.icon(
+                              onPressed:
+                                  authState.isLoading ? null : _handleGoogleLogin,
+                              icon: const Icon(Icons.g_mobiledata_rounded, size: 28),
+                              label: Text(tr('continue_with_google')),
+                              style: OutlinedButton.styleFrom(
+                                minimumSize: const Size.fromHeight(52),
+                                foregroundColor: const Color(0xFF0F172A),
+                                side: const BorderSide(color: Color(0xFFE2E8F0)),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                            Text(
+                              tr('admin_contact_hint'),
+                              textAlign: TextAlign.center,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: const Color(0xFF64748B),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                ],
-                )
+                  ],
+                ),
               ),
             ),
           ),

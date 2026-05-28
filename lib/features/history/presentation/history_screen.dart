@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:easy_localization/easy_localization.dart';
-import 'package:go_router/go_router.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../exam/providers/exam_provider.dart';
 import '../../../shared/models/result_model.dart';
@@ -51,7 +50,7 @@ class HistoryScreen extends ConsumerWidget {
                   Icon(
                     Icons.history_edu_rounded,
                     size: 72,
-                    color: theme.colorScheme.primary.withOpacity(0.3),
+                    color: theme.colorScheme.primary.withValues(alpha: 0.3),
                   ),
                   const SizedBox(height: 16),
                   Text(
@@ -87,13 +86,13 @@ class HistoryScreen extends ConsumerWidget {
                               (isPassed
                                       ? AppTheme.successColor
                                       : AppTheme.errorColor)
-                                  .withOpacity(0.1),
+                                  .withValues(alpha: 0.1),
                           border: Border.all(
                             color:
                                 (isPassed
                                         ? AppTheme.successColor
                                         : AppTheme.errorColor)
-                                    .withOpacity(0.3),
+                                    .withValues(alpha: 0.3),
                             width: 1.5,
                           ),
                         ),
@@ -179,33 +178,6 @@ class HistoryScreen extends ConsumerWidget {
             style: const TextStyle(color: Colors.red),
           ),
         ),
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: 1,
-        onTap: (index) {
-          if (index == 0) {
-            context.go('/home');
-          } else if (index == 2) {
-            context.push('/profile');
-          }
-        },
-        items: [
-          BottomNavigationBarItem(
-            icon: const Icon(Icons.dashboard_outlined),
-            activeIcon: const Icon(Icons.dashboard),
-            label: tr('app_name'),
-          ),
-          BottomNavigationBarItem(
-            icon: const Icon(Icons.history_toggle_off_rounded),
-            activeIcon: const Icon(Icons.history),
-            label: tr('history'),
-          ),
-          BottomNavigationBarItem(
-            icon: const Icon(Icons.person_outline_rounded),
-            activeIcon: const Icon(Icons.person),
-            label: tr('profile'),
-          ),
-        ],
       ),
     );
   }

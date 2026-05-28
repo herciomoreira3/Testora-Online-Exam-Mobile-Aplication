@@ -6,7 +6,9 @@ import '../../auth/providers/auth_provider.dart';
 import '../repositories/exam_repository.dart';
 import 'timer_provider.dart';
 
-final examRepositoryProvider = Provider<ExamRepository>((ref) => ExamRepository());
+final examRepositoryProvider = Provider<ExamRepository>(
+  (ref) => ExamRepository(),
+);
 
 final activeExamsProvider = StreamProvider<List<ExamModel>>((ref) {
   return ref.watch(examRepositoryProvider).getActiveExams();
@@ -59,11 +61,17 @@ class ExamSessionNotifier extends Notifier<ExamSessionState?> {
     );
 
     try {
-      final questions = await ref.read(examRepositoryProvider).getQuestionsForExam(exam.id);
-      
+      final questions = await ref
+          .read(examRepositoryProvider)
+          .getQuestionsForExam(exam.id);
+      final orderedQuestions = [...questions];
+      if (exam.shuffleQuestions) {
+        orderedQuestions.shuffle();
+      }
+
       state = ExamSessionState(
         exam: exam,
-        questions: questions,
+        questions: orderedQuestions,
         currentIndex: 0,
         answers: {},
         isSubmitting: false,
@@ -87,20 +95,24 @@ class ExamSessionNotifier extends Notifier<ExamSessionState?> {
 
   // Go to next question
   void nextQuestion() {
-    if (state == null || state!.currentIndex >= state!.questions.length - 1) return;
+    if (state == null || state!.currentIndex >= state!.questions.length - 1) {
+      return;
+    }
     state = state!.copyWith(currentIndex: state!.currentIndex + 1);
   }
 
   // Go to previous question
   void previousQuestion() {
-    if (state == null || state!.currentIndex <= 0) return;
+    if (state == null || state!.currentIndex <= 0) {
+      return;
+    }
     state = state!.copyWith(currentIndex: state!.currentIndex - 1);
   }
 
   // Calculate results and submit to Firestore
   Future<ResultModel> submit() async {
     if (state == null) throw 'La iha teste ativu.';
-    
+
     final currentSession = state!;
     state = currentSession.copyWith(isSubmitting: true);
 
@@ -139,10 +151,10 @@ class ExamSessionNotifier extends Notifier<ExamSessionState?> {
       );
 
       await ref.read(examRepositoryProvider).submitExamResult(result);
-      
+
       // Reset active session state
       state = null;
-      
+
       return result;
     } catch (e) {
       state = currentSession.copyWith(isSubmitting: false);
@@ -151,6 +163,7 @@ class ExamSessionNotifier extends Notifier<ExamSessionState?> {
   }
 }
 
-final examSessionProvider = NotifierProvider<ExamSessionNotifier, ExamSessionState?>(() {
-  return ExamSessionNotifier();
-});
+final examSessionProvider =
+    NotifierProvider<ExamSessionNotifier, ExamSessionState?>(() {
+      return ExamSessionNotifier();
+    });

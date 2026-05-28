@@ -36,26 +36,39 @@ class ResultScreen extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const SizedBox(height: 16),
-              
+
               // Celebratory Header card
               Card(
                 elevation: 4,
-                shadowColor: (isPassed ? AppTheme.successColor : AppTheme.errorColor).withOpacity(0.15),
+                shadowColor:
+                    (isPassed ? AppTheme.successColor : AppTheme.errorColor)
+                        .withValues(alpha: 0.15),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 36.0, horizontal: 20.0),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 36.0,
+                    horizontal: 20.0,
+                  ),
                   child: Column(
                     children: [
                       // Status Icon
                       Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: (isPassed ? AppTheme.successColor : AppTheme.errorColor).withOpacity(0.1),
+                          color:
+                              (isPassed
+                                      ? AppTheme.successColor
+                                      : AppTheme.errorColor)
+                                  .withValues(alpha: 0.1),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
-                          isPassed ? Icons.emoji_events_rounded : Icons.info_outline_rounded,
+                          isPassed
+                              ? Icons.emoji_events_rounded
+                              : Icons.info_outline_rounded,
                           size: 72,
-                          color: isPassed ? AppTheme.successColor : AppTheme.errorColor,
+                          color: isPassed
+                              ? AppTheme.successColor
+                              : AppTheme.errorColor,
                         ),
                       ),
                       const SizedBox(height: 24),
@@ -63,7 +76,9 @@ class ResultScreen extends StatelessWidget {
                         isPassed ? 'Parabéns!' : 'Koko Fali!',
                         style: theme.textTheme.titleLarge?.copyWith(
                           fontSize: 28,
-                          color: isPassed ? AppTheme.successColor : AppTheme.errorColor,
+                          color: isPassed
+                              ? AppTheme.successColor
+                              : AppTheme.errorColor,
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -73,7 +88,7 @@ class ResultScreen extends StatelessWidget {
                         style: theme.textTheme.titleMedium,
                       ),
                       const SizedBox(height: 28),
-                      
+
                       // Score circle badge
                       Stack(
                         alignment: Alignment.center,
@@ -86,7 +101,9 @@ class ResultScreen extends StatelessWidget {
                               strokeWidth: 10,
                               backgroundColor: const Color(0xFFE2E8F0),
                               valueColor: AlwaysStoppedAnimation<Color>(
-                                isPassed ? AppTheme.successColor : AppTheme.errorColor,
+                                isPassed
+                                    ? AppTheme.successColor
+                                    : AppTheme.errorColor,
                               ),
                             ),
                           ),
@@ -96,7 +113,9 @@ class ResultScreen extends StatelessWidget {
                                 '${result.percentage.toStringAsFixed(0)}%',
                                 style: theme.textTheme.titleLarge?.copyWith(
                                   fontSize: 32,
-                                  color: isPassed ? AppTheme.successColor : AppTheme.errorColor,
+                                  color: isPassed
+                                      ? AppTheme.successColor
+                                      : AppTheme.errorColor,
                                 ),
                               ),
                               Text(
@@ -134,7 +153,9 @@ class ResultScreen extends StatelessWidget {
                         context,
                         icon: Icons.calendar_month_outlined,
                         label: 'Data entrega:',
-                        value: DateFormat('dd/MM/yyyy HH:mm').format(result.submittedAt),
+                        value: DateFormat(
+                          'dd/MM/yyyy HH:mm',
+                        ).format(result.submittedAt),
                       ),
                     ],
                   ),
