@@ -2,6 +2,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/themes/app_theme.dart';
 import '../../../shared/models/user_model.dart';
 import '../providers/admin_provider.dart';
 
@@ -72,7 +73,8 @@ class _ManageUsersScreenState extends ConsumerState<ManageUsersScreen> {
   List<UserModel> _applyFilter(List<UserModel> users) {
     return users.where((user) {
       final needle = _query.trim().toLowerCase();
-      final matchesSearch = needle.isEmpty ||
+      final matchesSearch =
+          needle.isEmpty ||
           user.name.toLowerCase().contains(needle) ||
           user.email.toLowerCase().contains(needle) ||
           user.school.toLowerCase().contains(needle);
@@ -157,7 +159,7 @@ class _ManageUsersScreenState extends ConsumerState<ManageUsersScreen> {
     final theme = Theme.of(context);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F9FC),
+      backgroundColor: AppTheme.pageBackground(context),
       body: usersAsync.when(
         data: (users) {
           if (users.isEmpty) {
@@ -173,14 +175,14 @@ class _ManageUsersScreenState extends ConsumerState<ManageUsersScreen> {
                 tr('manage_users'),
                 style: theme.textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.w900,
-                  color: const Color(0xFF0F172A),
+                  color: AppTheme.primaryText(context),
                 ),
               ),
               const SizedBox(height: 4),
               Text(
                 tr('manage_users_filter_hint'),
                 style: theme.textTheme.bodyMedium?.copyWith(
-                  color: const Color(0xFF64748B),
+                  color: AppTheme.mutedText(context),
                 ),
               ),
               const SizedBox(height: 16),
@@ -256,16 +258,18 @@ class _RoleFilterBar extends StatelessWidget {
               avatar: Icon(
                 iconFor(filter),
                 size: 18,
-                color: isSelected ? Colors.white : const Color(0xFF64748B),
+                color: isSelected ? Colors.white : AppTheme.mutedText(context),
               ),
               label: Text('${labelFor(filter)} (${countFor(filter)})'),
               selectedColor: Theme.of(context).colorScheme.primary,
               checkmarkColor: Colors.white,
               labelStyle: TextStyle(
-                color: isSelected ? Colors.white : const Color(0xFF0F172A),
+                color: isSelected
+                    ? Colors.white
+                    : AppTheme.primaryText(context),
                 fontWeight: FontWeight.w700,
               ),
-              side: const BorderSide(color: Color(0xFFE2E8F0)),
+              side: BorderSide(color: AppTheme.borderColor(context)),
               onSelected: (_) => onSelected(filter),
             ),
           );
@@ -276,10 +280,7 @@ class _RoleFilterBar extends StatelessWidget {
 }
 
 class _UserSearchField extends StatelessWidget {
-  const _UserSearchField({
-    required this.controller,
-    required this.onChanged,
-  });
+  const _UserSearchField({required this.controller, required this.onChanged});
 
   final TextEditingController controller;
   final ValueChanged<String> onChanged;
@@ -329,10 +330,12 @@ class _UserCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppTheme.cardBackground(context),
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
-          color: isPending ? const Color(0xFFF59E0B) : const Color(0xFFE2E8F0),
+          color: isPending
+              ? const Color(0xFFF59E0B)
+              : AppTheme.borderColor(context),
         ),
         boxShadow: const [
           BoxShadow(
@@ -345,11 +348,15 @@ class _UserCard extends StatelessWidget {
       child: Row(
         children: [
           CircleAvatar(
-            backgroundColor:
-                isPending ? const Color(0xFFFFF7ED) : const Color(0xFFEFF6FF),
-            foregroundColor:
-                isPending ? const Color(0xFFEA580C) : const Color(0xFF00288E),
-            child: Text(user.name.isNotEmpty ? user.name[0].toUpperCase() : 'U'),
+            backgroundColor: isPending
+                ? const Color(0xFFFFF7ED)
+                : const Color(0xFFEFF6FF),
+            foregroundColor: isPending
+                ? const Color(0xFFEA580C)
+                : const Color(0xFF00288E),
+            child: Text(
+              user.name.isNotEmpty ? user.name[0].toUpperCase() : 'U',
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -367,7 +374,7 @@ class _UserCard extends StatelessWidget {
                   user.email,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Color(0xFF64748B)),
+                  style: TextStyle(color: AppTheme.mutedText(context)),
                 ),
                 const SizedBox(height: 6),
                 Text(
@@ -375,7 +382,7 @@ class _UserCard extends StatelessWidget {
                   style: TextStyle(
                     color: isPending
                         ? const Color(0xFFEA580C)
-                        : const Color(0xFF64748B),
+                        : AppTheme.mutedText(context),
                     fontWeight: FontWeight.w700,
                     fontSize: 12,
                   ),
@@ -407,9 +414,9 @@ class _EmptyFilteredUsers extends StatelessWidget {
       padding: const EdgeInsets.all(28),
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppTheme.cardBackground(context),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: AppTheme.borderColor(context)),
       ),
       child: Text('${tr('no_users')} - $label'),
     );

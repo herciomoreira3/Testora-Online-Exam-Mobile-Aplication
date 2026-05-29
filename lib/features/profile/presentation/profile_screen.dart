@@ -3,7 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/providers/app_preferences_provider.dart';
 import '../../../core/themes/app_theme.dart';
+import '../../../shared/models/subject_model.dart';
+import '../../../shared/models/user_model.dart';
+import '../../admin/providers/admin_provider.dart';
 import '../../auth/providers/auth_provider.dart';
 
 class ProfileScreen extends ConsumerWidget {
@@ -31,12 +35,12 @@ class ProfileScreen extends ConsumerWidget {
         ),
         title: Row(
           children: [
-            const Icon(Icons.school_outlined, color: AppTheme.primaryColor),
+            Icon(Icons.school_outlined, color: theme.colorScheme.primary),
             const SizedBox(width: 10),
             Text(
               tr('app_name'),
               style: theme.textTheme.titleLarge?.copyWith(
-                color: AppTheme.primaryColor,
+                color: theme.colorScheme.primary,
                 fontSize: 30,
               ),
             ),
@@ -53,81 +57,21 @@ class ProfileScreen extends ConsumerWidget {
             return ListView(
               padding: const EdgeInsets.fromLTRB(20, 32, 20, 28),
               children: [
-                Center(
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      Container(
-                        width: 128,
-                        height: 128,
-                        decoration: const BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.white,
-                          boxShadow: [
-                            BoxShadow(
-                              color: Color(0x33CBD5E1),
-                              blurRadius: 24,
-                              offset: Offset(8, 10),
-                            ),
-                            BoxShadow(
-                              color: Colors.white,
-                              blurRadius: 16,
-                              offset: Offset(-6, -6),
-                            ),
-                          ],
-                        ),
-                        child: CircleAvatar(
-                          backgroundColor: AppTheme.primaryColor.withValues(
-                            alpha: 0.08,
-                          ),
-                          child: Text(
-                            user.name.isNotEmpty
-                                ? user.name[0].toUpperCase()
-                                : 'U',
-                            style: const TextStyle(
-                              fontSize: 46,
-                              fontWeight: FontWeight.w800,
-                              color: AppTheme.primaryColor,
-                            ),
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        right: -4,
-                        bottom: 12,
-                        child: Container(
-                          width: 44,
-                          height: 44,
-                          decoration: const BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: AppTheme.primaryColor,
-                          ),
-                          child: const Icon(
-                            Icons.edit_outlined,
-                            color: Colors.white,
-                            size: 20,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                Center(child: _ProfileAvatar(user: user)),
                 const SizedBox(height: 22),
                 Text(
                   user.name,
                   textAlign: TextAlign.center,
                   style: theme.textTheme.titleLarge?.copyWith(
-                    color: AppTheme.primaryColor,
+                    color: theme.colorScheme.primary,
                     fontSize: 26,
                   ),
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  '${_roleLabel(user.role)} • ${user.school}',
+                  '${_roleLabel(user.role)} - ${user.school}',
                   textAlign: TextAlign.center,
-                  style: theme.textTheme.bodyLarge?.copyWith(
-                    color: const Color(0xFF444653),
-                  ),
+                  style: theme.textTheme.bodyLarge,
                 ),
                 const SizedBox(height: 36),
                 _SettingsCard(
@@ -136,60 +80,43 @@ class ProfileScreen extends ConsumerWidget {
                     _SettingsRow(
                       icon: Icons.language_rounded,
                       title: tr('language'),
-                      trailing: SegmentedButton<Locale>(
-                        showSelectedIcon: false,
-                        style: ButtonStyle(
-                          visualDensity: VisualDensity.compact,
-                          backgroundColor: WidgetStateProperty.resolveWith((
-                            states,
-                          ) {
-                            if (states.contains(WidgetState.selected)) {
-                              return Colors.white;
-                            }
-                            return const Color(0xFFF1F5F9);
-                          }),
-                        ),
-                        segments: const [
-                          ButtonSegment(
-                            value: Locale('en', 'US'),
-                            label: Text('English'),
-                          ),
-                          ButtonSegment(
-                            value: Locale('tet', 'TL'),
-                            label: Text('Tetun'),
-                          ),
-                        ],
-                        selected: {context.locale},
-                        onSelectionChanged: (selection) {
-                          context.setLocale(selection.first);
-                        },
+                      subtitle: _languageSubtitle(context.locale),
+                      trailing: _LanguageButton(
+                        label: _languageLabel(context.locale),
+                        onPressed: () =>
+                            _showLanguagePicker(context, ref, user),
                       ),
                     ),
                     _SettingsRow(
-                      icon: Icons.light_mode_outlined,
+                      icon: Icons.dark_mode_outlined,
                       title: tr('dark_mode'),
-                      trailing: Switch(value: false, onChanged: (_) {}),
+                      trailing: Switch(
+                        value:
+                            ref.watch(darkModeOverrideProvider) ??
+                            user.darkMode,
+                        onChanged: (value) async {
+                          ref
+                              .read(darkModeOverrideProvider.notifier)
+                              .setValue(value);
+                          await _updatePreference(ref, user, {
+                            'darkMode': value,
+                          }, refresh: false);
+                        },
+                      ),
                     ),
                   ],
                 ),
+                if (user.isTeacher || user.isStudent) ...[
+                  const SizedBox(height: 24),
+                  _SubjectPreferenceCard(user: user),
+                ],
                 const SizedBox(height: 24),
                 _SettingsCard(
-                  title: tr('notifications_security'),
+                  title: tr('account_verification'),
                   children: [
                     _SettingsRow(
-                      icon: Icons.notifications_none_rounded,
-                      title: tr('exam_notifications'),
-                      subtitle: tr('exam_notifications_desc'),
-                      trailing: Switch(value: true, onChanged: (_) {}),
-                    ),
-                    _SettingsRow(
-                      icon: Icons.lock_outline_rounded,
-                      title: tr('change_password'),
-                      trailing: const Icon(Icons.chevron_right_rounded),
-                    ),
-                    _SettingsRow(
                       icon: Icons.verified_user_outlined,
-                      title: tr('account_verification'),
+                      title: tr('active'),
                       trailing: Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 14,
@@ -210,26 +137,10 @@ class ProfileScreen extends ConsumerWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: 24),
-                _SettingsCard(
-                  title: tr('help'),
-                  children: [
-                    _SettingsRow(
-                      icon: Icons.help_outline_rounded,
-                      title: tr('help_center'),
-                      trailing: const Icon(Icons.chevron_right_rounded),
-                    ),
-                    _SettingsRow(
-                      icon: Icons.description_outlined,
-                      title: tr('terms_conditions'),
-                      trailing: const Icon(Icons.chevron_right_rounded),
-                    ),
-                  ],
-                ),
                 const SizedBox(height: 28),
                 ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
+                    backgroundColor: theme.colorScheme.surface,
                     foregroundColor: AppTheme.errorColor,
                     elevation: 0,
                     padding: const EdgeInsets.symmetric(vertical: 18),
@@ -240,10 +151,17 @@ class ProfileScreen extends ConsumerWidget {
                   onPressed: authState.isLoading
                       ? null
                       : () async {
-                          await ref
+                          final success = await ref
                               .read(authControllerProvider.notifier)
                               .logout();
-                          if (context.mounted) context.go('/login');
+                          if (context.mounted && success) {
+                            final router = GoRouter.of(context);
+                            final navigator = Navigator.of(context);
+                            while (navigator.canPop()) {
+                              navigator.pop();
+                            }
+                            router.go('/login');
+                          }
                         },
                   icon: authState.isLoading
                       ? const SizedBox(
@@ -262,7 +180,7 @@ class ProfileScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 28),
                 Text(
-                  'Testora v1.0.0 • Academic Integrity Guaranteed',
+                  'Testora v1.0.0 - Academic Integrity Guaranteed',
                   textAlign: TextAlign.center,
                   style: theme.textTheme.bodyMedium,
                 ),
@@ -281,6 +199,322 @@ class ProfileScreen extends ConsumerWidget {
     if (role == 'teacher') return tr('teacher');
     return tr('student');
   }
+
+  static Future<void> _updatePreference(
+    WidgetRef ref,
+    UserModel user,
+    Map<String, dynamic> data, {
+    bool refresh = true,
+  }) async {
+    await ref
+        .read(authRepositoryProvider)
+        .updateUserPreferences(user.uid, data);
+    if (refresh) {
+      ref.invalidate(userProfileProvider);
+    }
+  }
+
+  static String _languageLabel(Locale locale) {
+    return locale.languageCode == 'en' ? 'English' : 'Tetun';
+  }
+
+  static String _languageSubtitle(Locale locale) {
+    return locale.languageCode == 'en'
+        ? tr('language_active_en')
+        : tr('language_active_tet');
+  }
+
+  static Future<void> _showLanguagePicker(
+    BuildContext context,
+    WidgetRef ref,
+    UserModel user,
+  ) async {
+    final selected = context.locale.languageCode;
+    final picked = await showModalBottomSheet<Locale>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  tr('choose_language'),
+                  style: Theme.of(sheetContext).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 12),
+                _LanguageOptionTile(
+                  title: 'Tetun',
+                  subtitle: tr('language_tet_desc'),
+                  locale: const Locale('tet', 'TL'),
+                  selected: selected == 'tet',
+                ),
+                const SizedBox(height: 10),
+                _LanguageOptionTile(
+                  title: 'English',
+                  subtitle: tr('language_en_desc'),
+                  locale: const Locale('en', 'US'),
+                  selected: selected == 'en',
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    if (picked == null) return;
+    if (context.mounted) {
+      await context.setLocale(picked);
+    }
+    await _updatePreference(ref, user, {
+      'language': picked.languageCode,
+    }, refresh: false);
+  }
+}
+
+class _LanguageButton extends StatelessWidget {
+  const _LanguageButton({required this.label, required this.onPressed});
+
+  final String label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return FilledButton.tonalIcon(
+      style: FilledButton.styleFrom(
+        visualDensity: VisualDensity.compact,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      ),
+      onPressed: onPressed,
+      icon: const Icon(Icons.translate_rounded, size: 18),
+      label: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(label),
+          const SizedBox(width: 4),
+          const Icon(Icons.keyboard_arrow_down_rounded, size: 18),
+        ],
+      ),
+    );
+  }
+}
+
+class _LanguageOptionTile extends StatelessWidget {
+  const _LanguageOptionTile({
+    required this.title,
+    required this.subtitle,
+    required this.locale,
+    required this.selected,
+  });
+
+  final String title;
+  final String subtitle;
+  final Locale locale;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Material(
+      color: selected
+          ? theme.colorScheme.primaryContainer.withValues(alpha: 0.45)
+          : theme.colorScheme.surfaceContainerHighest,
+      borderRadius: BorderRadius.circular(16),
+      child: ListTile(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        leading: CircleAvatar(
+          backgroundColor: selected
+              ? theme.colorScheme.primary
+              : theme.colorScheme.surface,
+          foregroundColor: selected
+              ? theme.colorScheme.onPrimary
+              : theme.colorScheme.primary,
+          child: Text(title[0]),
+        ),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+        subtitle: Text(subtitle),
+        trailing: selected
+            ? Icon(Icons.check_circle_rounded, color: theme.colorScheme.primary)
+            : const Icon(Icons.radio_button_unchecked_rounded),
+        onTap: () => Navigator.pop(context, locale),
+      ),
+    );
+  }
+}
+
+class _ProfileAvatar extends StatelessWidget {
+  const _ProfileAvatar({required this.user});
+
+  final UserModel user;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 128,
+      height: 128,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: Theme.of(context).colorScheme.surface,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 24,
+            offset: const Offset(8, 10),
+          ),
+        ],
+      ),
+      child: CircleAvatar(
+        backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.08),
+        foregroundImage: user.photoUrl.isNotEmpty
+            ? NetworkImage(user.photoUrl)
+            : null,
+        child: user.photoUrl.isEmpty
+            ? Text(
+                user.name.isNotEmpty ? user.name[0].toUpperCase() : 'U',
+                style: const TextStyle(
+                  fontSize: 46,
+                  fontWeight: FontWeight.w800,
+                  color: AppTheme.primaryColor,
+                ),
+              )
+            : null,
+      ),
+    );
+  }
+}
+
+class _SubjectPreferenceCard extends ConsumerWidget {
+  const _SubjectPreferenceCard({required this.user});
+
+  final UserModel user;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final subjectsAsync = user.isTeacher
+        ? ref.watch(teacherSubjectsProvider(user.uid))
+        : ref.watch(studentSubjectsProvider(user.uid));
+
+    return subjectsAsync.when(
+      data: (subjects) {
+        if (subjects.isEmpty) {
+          return _SettingsCard(
+            title: tr('active_subject'),
+            children: [
+              _SettingsRow(
+                icon: Icons.menu_book_outlined,
+                title: tr('no_subjects'),
+                subtitle: tr('selected_subject_desc'),
+                trailing: const SizedBox.shrink(),
+              ),
+            ],
+          );
+        }
+
+        final profileSelectedIsValid = subjects.any(
+          (subject) => subject.id == user.selectedSubjectId,
+        );
+        final overrideSelectedId = ref.watch(selectedSubjectOverrideProvider);
+        final activeSelectedId = overrideSelectedId ?? user.selectedSubjectId;
+        final activeSelectedIsValid = subjects.any(
+          (subject) => subject.id == activeSelectedId,
+        );
+        final selectedId = activeSelectedIsValid
+            ? activeSelectedId
+            : profileSelectedIsValid
+            ? user.selectedSubjectId
+            : subjects.first.id;
+        if (!profileSelectedIsValid && overrideSelectedId != selectedId) {
+          ref
+              .read(selectedSubjectOverrideProvider.notifier)
+              .setValue(selectedId);
+          Future.microtask(
+            () => ProfileScreen._updatePreference(ref, user, {
+              'selectedSubjectId': selectedId,
+            }, refresh: false),
+          );
+        }
+
+        return _SettingsCard(
+          title: tr('active_subject'),
+          children: [
+            _SubjectDropdown(
+              subjects: subjects,
+              selectedId: selectedId,
+              onChanged: (value) {
+                if (value == null) return;
+                ref
+                    .read(selectedSubjectOverrideProvider.notifier)
+                    .setValue(value);
+                ProfileScreen._updatePreference(ref, user, {
+                  'selectedSubjectId': value,
+                }, refresh: false);
+              },
+            ),
+          ],
+        );
+      },
+      loading: () => _SettingsCard(
+        title: tr('active_subject'),
+        children: const [
+          Center(
+            child: Padding(
+              padding: EdgeInsets.only(bottom: 14),
+              child: CircularProgressIndicator(),
+            ),
+          ),
+        ],
+      ),
+      error: (_, __) => _SettingsCard(
+        title: tr('active_subject'),
+        children: [
+          _SettingsRow(
+            icon: Icons.error_outline_rounded,
+            title: tr('error_occurred'),
+            trailing: const SizedBox.shrink(),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SubjectDropdown extends StatelessWidget {
+  const _SubjectDropdown({
+    required this.subjects,
+    required this.selectedId,
+    required this.onChanged,
+  });
+
+  final List<SubjectModel> subjects;
+  final String selectedId;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: DropdownButtonFormField<String>(
+        initialValue: selectedId,
+        decoration: InputDecoration(
+          labelText: tr('choose_subject'),
+          helperText: tr('selected_subject_desc'),
+          prefixIcon: const Icon(Icons.menu_book_outlined),
+        ),
+        items: subjects
+            .map(
+              (subject) => DropdownMenuItem<String>(
+                value: subject.id,
+                child: Text(subject.name),
+              ),
+            )
+            .toList(),
+        onChanged: onChanged,
+      ),
+    );
+  }
 }
 
 class _SettingsCard extends StatelessWidget {
@@ -291,21 +525,17 @@ class _SettingsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Container(
       padding: const EdgeInsets.fromLTRB(24, 22, 24, 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(20),
-        boxShadow: const [
+        boxShadow: [
           BoxShadow(
-            color: Color(0x1FCBD5E1),
+            color: Colors.black.withValues(alpha: 0.08),
             blurRadius: 24,
-            offset: Offset(8, 12),
-          ),
-          BoxShadow(
-            color: Colors.white,
-            blurRadius: 16,
-            offset: Offset(-6, -6),
+            offset: const Offset(8, 12),
           ),
         ],
       ),
@@ -314,9 +544,8 @@ class _SettingsCard extends StatelessWidget {
         children: [
           Text(
             title.toUpperCase(),
-            style: const TextStyle(
-              color: Color(0xFF757684),
-              fontSize: 13,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
               fontWeight: FontWeight.w800,
               letterSpacing: 1.1,
             ),
@@ -344,6 +573,7 @@ class _SettingsRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: Row(
@@ -352,17 +582,10 @@ class _SettingsRow extends StatelessWidget {
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: theme.colorScheme.surfaceContainerHighest,
               borderRadius: BorderRadius.circular(12),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x1FCBD5E1),
-                  blurRadius: 10,
-                  offset: Offset(4, 5),
-                ),
-              ],
             ),
-            child: Icon(icon, color: AppTheme.primaryColor),
+            child: Icon(icon, color: theme.colorScheme.primary),
           ),
           const SizedBox(width: 18),
           Expanded(
@@ -371,18 +594,13 @@ class _SettingsRow extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
-                    color: Color(0xFF191C1E),
-                    fontSize: 16,
+                  style: theme.textTheme.bodyLarge?.copyWith(
                     fontWeight: FontWeight.w600,
                   ),
                 ),
                 if (subtitle != null) ...[
                   const SizedBox(height: 2),
-                  Text(
-                    subtitle!,
-                    style: const TextStyle(color: Color(0xFF757684)),
-                  ),
+                  Text(subtitle!, style: theme.textTheme.bodyMedium),
                 ],
               ],
             ),

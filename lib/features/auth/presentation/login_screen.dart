@@ -40,6 +40,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       context.go('/home');
     } else {
       await ref.read(authControllerProvider.notifier).logout();
+      if (!mounted) return;
+      context.go('/login');
       _showError('account_not_approved');
     }
   }
@@ -55,6 +57,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     if (success) {
       await _routeToDashboard();
     } else {
+      context.go('/login');
       _showControllerError();
     }
   }
@@ -68,6 +71,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     if (success) {
       await _routeToDashboard();
     } else {
+      context.go('/login');
       _showControllerError();
     }
   }
@@ -80,9 +84,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       builder: (context) {
         return AlertDialog(
           title: Text(tr('agreement_title')),
-          content: Text(
-            '${tr('agreement_message')}\n\n${tr('email')}: $email',
-          ),
+          content: Text('${tr('agreement_message')}\n\n${tr('email')}: $email'),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
@@ -245,14 +247,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             ),
                             const SizedBox(height: 14),
                             OutlinedButton.icon(
-                              onPressed:
-                                  authState.isLoading ? null : _handleGoogleLogin,
-                              icon: const Icon(Icons.g_mobiledata_rounded, size: 28),
+                              onPressed: authState.isLoading
+                                  ? null
+                                  : _handleGoogleLogin,
+                              icon: const Icon(
+                                Icons.g_mobiledata_rounded,
+                                size: 28,
+                              ),
                               label: Text(tr('continue_with_google')),
                               style: OutlinedButton.styleFrom(
                                 minimumSize: const Size.fromHeight(52),
                                 foregroundColor: const Color(0xFF0F172A),
-                                side: const BorderSide(color: Color(0xFFE2E8F0)),
+                                side: const BorderSide(
+                                  color: Color(0xFFE2E8F0),
+                                ),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(16),
                                 ),

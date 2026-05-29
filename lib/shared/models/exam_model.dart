@@ -13,6 +13,7 @@ class ExamModel {
   final String category;
   final bool isActive;
   final bool published;
+  final String status;
   final bool shuffleQuestions;
   final bool antiCheatEnabled;
   final int notificationLeadMinutes;
@@ -33,6 +34,7 @@ class ExamModel {
     required this.category,
     required this.isActive,
     required this.published,
+    required this.status,
     required this.shuffleQuestions,
     required this.antiCheatEnabled,
     required this.notificationLeadMinutes,
@@ -40,6 +42,13 @@ class ExamModel {
     required this.teacherId,
     required this.createdAt,
   });
+
+  bool get isDone =>
+      status == 'done' ||
+      (published && !isActive && DateTime.now().isAfter(endTime));
+  bool get isSending => status == 'sending';
+  bool get isDraft => !published && !isSending && !isDone;
+  bool get isPublished => published && !isDone;
 
   Map<String, dynamic> toMap() {
     return {
@@ -54,6 +63,7 @@ class ExamModel {
       'category': category,
       'isActive': isActive,
       'published': published,
+      'status': status,
       'shuffleQuestions': shuffleQuestions,
       'antiCheatEnabled': antiCheatEnabled,
       'notificationLeadMinutes': notificationLeadMinutes,
@@ -101,6 +111,7 @@ class ExamModel {
       category: map['category'] ?? subject,
       isActive: map['isActive'] ?? true,
       published: map['published'] == true,
+      status: map['status']?.toString() ?? '',
       shuffleQuestions: map['shuffleQuestions'] ?? true,
       antiCheatEnabled: map['antiCheatEnabled'] ?? true,
       notificationLeadMinutes: map['notificationLeadMinutes'] is int

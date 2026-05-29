@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
+import '../../../core/themes/app_theme.dart';
 import '../../../shared/models/result_model.dart';
 import '../../../shared/models/user_model.dart';
 import '../../professor/providers/professor_exam_provider.dart';
@@ -15,11 +16,12 @@ final adminAllResultsProvider = StreamProvider<List<ResultModel>>((ref) {
       .collection('user_exam_results')
       .snapshots()
       .map((snap) {
-    final results =
-        snap.docs.map((doc) => ResultModel.fromMap(doc.data(), doc.id)).toList();
-    results.sort((a, b) => b.submittedAt.compareTo(a.submittedAt));
-    return results;
-  });
+        final results = snap.docs
+            .map((doc) => ResultModel.fromMap(doc.data(), doc.id))
+            .toList();
+        results.sort((a, b) => b.submittedAt.compareTo(a.submittedAt));
+        return results;
+      });
 });
 
 class AdminReportsScreen extends ConsumerStatefulWidget {
@@ -41,10 +43,8 @@ class _AdminReportsScreenState extends ConsumerState<AdminReportsScreen> {
       isScrollControlled: true,
       useSafeArea: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => _StudentPickerSheet(
-        students: students,
-        selectedId: _studentId,
-      ),
+      builder: (_) =>
+          _StudentPickerSheet(students: students, selectedId: _studentId),
     );
     if (selected != null) setState(() => _studentId = selected);
   }
@@ -55,9 +55,9 @@ class _AdminReportsScreenState extends ConsumerState<AdminReportsScreen> {
     String examLabel,
   ) async {
     if (rows.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(tr('no_report_data'))),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(tr('no_report_data'))));
       return;
     }
 
@@ -108,9 +108,9 @@ class _AdminReportsScreenState extends ConsumerState<AdminReportsScreen> {
         filename: 'testora-report.pdf',
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(tr('pdf_export_ready'))),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(tr('pdf_export_ready'))));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -129,7 +129,8 @@ class _AdminReportsScreenState extends ConsumerState<AdminReportsScreen> {
   @override
   Widget build(BuildContext context) {
     final exams = ref.watch(allExamsProvider).value ?? const [];
-    final results = ref.watch(adminAllResultsProvider).value ?? const <ResultModel>[];
+    final results =
+        ref.watch(adminAllResultsProvider).value ?? const <ResultModel>[];
     final users = ref.watch(allUsersProvider).value ?? const <UserModel>[];
     final subjects = ref.watch(subjectsProvider).value ?? const [];
     final theme = Theme.of(context);
@@ -137,35 +138,40 @@ class _AdminReportsScreenState extends ConsumerState<AdminReportsScreen> {
     final subjectLabel = _subjectId == 'all'
         ? tr('all')
         : subjects
-            .where((subject) => subject.id == _subjectId)
-            .map((subject) => subject.name)
-            .firstOrNull ??
-            tr('all');
+                  .where((subject) => subject.id == _subjectId)
+                  .map((subject) => subject.name)
+                  .firstOrNull ??
+              tr('all');
     final subjectExamIds = _subjectId == 'all'
         ? exams.map((exam) => exam.id).toSet()
         : exams
-            .where((exam) =>
-                exam.subjectId == _subjectId || exam.subject == subjectLabel)
-            .map((exam) => exam.id)
-            .toSet();
+              .where(
+                (exam) =>
+                    exam.subjectId == _subjectId ||
+                    exam.subject == subjectLabel,
+              )
+              .map((exam) => exam.id)
+              .toSet();
     final filteredExams = _subjectId == 'all'
         ? exams
         : exams.where((exam) => subjectExamIds.contains(exam.id)).toList();
     final examLabel = _examId == 'all'
         ? tr('all')
         : exams
-            .where((exam) => exam.id == _examId)
-            .map((exam) => exam.title)
-            .firstOrNull ??
-            tr('all');
+                  .where((exam) => exam.id == _examId)
+                  .map((exam) => exam.title)
+                  .firstOrNull ??
+              tr('all');
     final assignedStudentIds = _subjectId == 'all'
         ? users.where((user) => user.isStudent).map((user) => user.uid).toSet()
         : subjects
-            .where((subject) => subject.id == _subjectId)
-            .expand((subject) => subject.studentIds)
-            .toSet();
+              .where((subject) => subject.id == _subjectId)
+              .expand((subject) => subject.studentIds)
+              .toSet();
     final studentOptions = users
-        .where((user) => user.isStudent && assignedStudentIds.contains(user.uid))
+        .where(
+          (user) => user.isStudent && assignedStudentIds.contains(user.uid),
+        )
         .toList();
     if (_studentId != 'all' &&
         !studentOptions.any((student) => student.uid == _studentId)) {
@@ -174,31 +180,36 @@ class _AdminReportsScreenState extends ConsumerState<AdminReportsScreen> {
     final studentLabel = _studentId == 'all'
         ? tr('all')
         : studentOptions
-                .where((student) => student.uid == _studentId)
-                .map((student) => student.name)
-                .firstOrNull ??
-            tr('all');
-    final rows = results.where((result) {
-      final matchesSubject = _subjectId == 'all' || subjectExamIds.contains(result.examId);
-      final matchesExam = _examId == 'all' || result.examId == _examId;
-      final matchesStudent = _studentId == 'all' || result.userId == _studentId;
-      return matchesSubject && matchesExam && matchesStudent;
-    }).map((result) {
-      final user = users.where((u) => u.uid == result.userId).firstOrNull;
-      final exam = exams.where((e) => e.id == result.examId).firstOrNull;
-      return _ReportRow(
-        studentName: user?.name ?? result.userId,
-        studentEmail: user?.email ?? '-',
-        examTitle: result.examTitle,
-        subject: exam?.subject ?? '-',
-        score: result.score.toString(),
-        percentage: result.percentage.toStringAsFixed(1),
-        date: DateFormat('dd/MM/yyyy HH:mm').format(result.submittedAt),
-      );
-    }).toList();
+                  .where((student) => student.uid == _studentId)
+                  .map((student) => student.name)
+                  .firstOrNull ??
+              tr('all');
+    final rows = results
+        .where((result) {
+          final matchesSubject =
+              _subjectId == 'all' || subjectExamIds.contains(result.examId);
+          final matchesExam = _examId == 'all' || result.examId == _examId;
+          final matchesStudent =
+              _studentId == 'all' || result.userId == _studentId;
+          return matchesSubject && matchesExam && matchesStudent;
+        })
+        .map((result) {
+          final user = users.where((u) => u.uid == result.userId).firstOrNull;
+          final exam = exams.where((e) => e.id == result.examId).firstOrNull;
+          return _ReportRow(
+            studentName: user?.name ?? result.userId,
+            studentEmail: user?.email ?? '-',
+            examTitle: result.examTitle,
+            subject: exam?.subject ?? '-',
+            score: result.score.toString(),
+            percentage: result.percentage.toStringAsFixed(1),
+            date: DateFormat('dd/MM/yyyy HH:mm').format(result.submittedAt),
+          );
+        })
+        .toList();
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F9FC),
+      backgroundColor: AppTheme.pageBackground(context),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
         children: [
@@ -206,14 +217,14 @@ class _AdminReportsScreenState extends ConsumerState<AdminReportsScreen> {
             tr('reports'),
             style: theme.textTheme.headlineSmall?.copyWith(
               fontWeight: FontWeight.w900,
-              color: const Color(0xFF0F172A),
+              color: AppTheme.primaryText(context),
             ),
           ),
           const SizedBox(height: 4),
           Text(
             tr('reports_hint'),
             style: theme.textTheme.bodyMedium?.copyWith(
-              color: const Color(0xFF64748B),
+              color: AppTheme.mutedText(context),
             ),
           ),
           const SizedBox(height: 16),
@@ -251,10 +262,8 @@ class _AdminReportsScreenState extends ConsumerState<AdminReportsScreen> {
             items: [
               DropdownMenuItem(value: 'all', child: Text(tr('all'))),
               ...filteredExams.map(
-                (exam) => DropdownMenuItem(
-                  value: exam.id,
-                  child: Text(exam.title),
-                ),
+                (exam) =>
+                    DropdownMenuItem(value: exam.id, child: Text(exam.title)),
               ),
             ],
             onChanged: (value) {
@@ -295,9 +304,9 @@ class _ReportTable extends StatelessWidget {
         padding: const EdgeInsets.all(28),
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: AppTheme.cardBackground(context),
           borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: const Color(0xFFE2E8F0)),
+          border: Border.all(color: AppTheme.borderColor(context)),
         ),
         child: Text(tr('no_history')),
       );
@@ -305,9 +314,9 @@ class _ReportTable extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppTheme.cardBackground(context),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: AppTheme.borderColor(context)),
       ),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
@@ -370,10 +379,7 @@ class _StudentFilterButton extends StatelessWidget {
 }
 
 class _StudentPickerSheet extends StatefulWidget {
-  const _StudentPickerSheet({
-    required this.students,
-    required this.selectedId,
-  });
+  const _StudentPickerSheet({required this.students, required this.selectedId});
 
   final List<UserModel> students;
   final String selectedId;
@@ -402,9 +408,9 @@ class _StudentPickerSheetState extends State<_StudentPickerSheet> {
     }).toList();
 
     return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      decoration: BoxDecoration(
+        color: AppTheme.cardBackground(context),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
       padding: EdgeInsets.only(
         left: 20,
@@ -420,9 +426,9 @@ class _StudentPickerSheetState extends State<_StudentPickerSheet> {
           children: [
             Text(
               tr('student'),
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w900,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
             ),
             const SizedBox(height: 12),
             TextField(

@@ -5,6 +5,7 @@ class ResultModel {
   final String userId;
   final String examId;
   final String examTitle; // Cached for history list UI rendering
+  final String subjectId;
   final int score;
   final double percentage;
   final int timeTaken; // in seconds
@@ -15,6 +16,7 @@ class ResultModel {
     required this.userId,
     required this.examId,
     required this.examTitle,
+    this.subjectId = '',
     required this.score,
     required this.percentage,
     required this.timeTaken,
@@ -26,6 +28,7 @@ class ResultModel {
       'userId': userId,
       'examId': examId,
       'examTitle': examTitle,
+      'subjectId': subjectId,
       'score': score,
       'percentage': percentage,
       'timeTaken': timeTaken,
@@ -56,6 +59,7 @@ class ResultModel {
       userId: map['userId'] ?? '',
       examId: map['examId'] ?? '',
       examTitle: map['examTitle'] ?? 'Teste Ujian',
+      subjectId: map['subjectId']?.toString() ?? '',
       score: map['score'] is int
           ? map['score']
           : int.tryParse(map['score'].toString()) ?? 0,

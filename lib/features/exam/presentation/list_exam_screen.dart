@@ -5,11 +5,16 @@ import 'package:go_router/go_router.dart';
 
 import '../../../shared/models/exam_model.dart';
 import '../../../shared/models/result_model.dart';
+import '../../../core/providers/app_preferences_provider.dart';
+import '../../../core/themes/app_theme.dart';
 import '../../admin/providers/admin_provider.dart';
 import '../../auth/providers/auth_provider.dart';
+import '../../professor/providers/professor_exam_provider.dart';
 import '../providers/exam_provider.dart';
 
-final studentDashboardResultsProvider = StreamProvider<List<ResultModel>>((ref) {
+final studentDashboardResultsProvider = StreamProvider<List<ResultModel>>((
+  ref,
+) {
   final authState = ref.watch(authStateProvider);
   return authState.when(
     data: (user) {
@@ -28,8 +33,8 @@ class ListExamScreen extends ConsumerWidget {
     return DateFormat('EEE, dd MMM yyyy - HH:mm').format(value);
   }
 
-  String _formatCountdown(DateTime value) {
-    final diff = value.difference(DateTime.now());
+  String _formatCountdown(DateTime value, DateTime now) {
+    final diff = value.difference(now);
     if (diff.isNegative) return '00:00';
     final hours = diff.inHours;
     final minutes = diff.inMinutes.remainder(60);
@@ -39,8 +44,10 @@ class ListExamScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final examsAsync = ref.watch(activeExamsProvider);
+    final allExams = ref.watch(allExamsProvider).value ?? const <ExamModel>[];
     final userAsync = ref.watch(userProfileProvider);
     final resultsAsync = ref.watch(studentDashboardResultsProvider);
+    final clockNow = ref.watch(examClockProvider).value ?? DateTime.now();
     final uid = ref.watch(authRepositoryProvider).currentUid;
     final subjectsAsync = uid == null
         ? const AsyncValue.data([])
@@ -48,49 +55,62 @@ class ListExamScreen extends ConsumerWidget {
     final theme = Theme.of(context);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F9FC),
-      appBar: AppBar(
-        title: Row(
-          children: [
-            Icon(Icons.school_rounded, color: theme.colorScheme.primary),
-            const SizedBox(width: 10),
-            Text(tr('app_name')),
-          ],
-        ),
-        actions: [
-          IconButton(
-            tooltip: tr('profile'),
-            icon: const Icon(Icons.account_circle_outlined, size: 28),
-            onPressed: () => context.go('/profile'),
-          ),
-        ],
-      ),
+      backgroundColor: AppTheme.pageBackground(context),
       body: examsAsync.when(
         data: (exams) {
           final user = userAsync.value;
-          final results = resultsAsync.value ?? const <ResultModel>[];
-          final subjects = subjectsAsync.value ?? const [];
-          final assignedSubjectIds = subjects.map((subject) => subject.id).toSet();
-          final assignedSubjectNames =
-              subjects.map((subject) => subject.name).toSet();
-          final completedExamIds =
-              results.map((result) => result.examId).toSet();
-          final now = DateTime.now();
+          final selectedSubjectId =
+              ref.watch(selectedSubjectOverrideProvider) ??
+              user?.selectedSubjectId ??
+              '';
+          final resultSubjectIds = {
+            for (final exam in allExams) exam.id: exam.subjectId,
+          };
+          final results = (resultsAsync.value ?? const <ResultModel>[]).where((
+            result,
+          ) {
+            if (selectedSubjectId.isEmpty) return true;
+            final resultSubjectId = result.subjectId.isNotEmpty
+                ? result.subjectId
+                : resultSubjectIds[result.examId] ?? '';
+            return resultSubjectId == selectedSubjectId;
+          }).toList();
+          final subjects = (subjectsAsync.value ?? const [])
+              .where(
+                (subject) =>
+                    selectedSubjectId.isEmpty ||
+                    subject.id == selectedSubjectId,
+              )
+              .toList();
+          final assignedSubjectIds = subjects
+              .map((subject) => subject.id)
+              .toSet();
+          final assignedSubjectNames = subjects
+              .map((subject) => subject.name)
+              .toSet();
+          final completedExamIds = results
+              .map((result) => result.examId)
+              .toSet();
+          final now = clockNow;
           final activeExams = exams.where((exam) {
-            final assigned = assignedSubjectIds.contains(exam.subjectId) ||
+            final assigned =
+                assignedSubjectIds.contains(exam.subjectId) ||
                 assignedSubjectNames.contains(exam.subject);
             final notCompleted = !completedExamIds.contains(exam.id);
             final notExpired = now.isBefore(exam.endTime);
-            return exam.totalQuestions > 0 && assigned && notCompleted && notExpired;
+            return exam.totalQuestions > 0 &&
+                assigned &&
+                notCompleted &&
+                notExpired;
           }).toList();
           final nextExam = activeExams.isNotEmpty ? activeExams.first : null;
           final completed = results.length;
           final average = results.isEmpty
               ? 0
               : results
-                    .map((result) => result.percentage)
-                    .reduce((a, b) => a + b) /
-                results.length;
+                        .map((result) => result.percentage)
+                        .reduce((a, b) => a + b) /
+                    results.length;
           final studyMinutes = results.fold<int>(
             0,
             (sum, result) => sum + (result.timeTaken ~/ 60),
@@ -108,23 +128,24 @@ class ListExamScreen extends ConsumerWidget {
                   '${tr('welcome_teacher')}, ${user?.name.split(' ').first ?? tr('student')}!',
                   style: theme.textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.w800,
-                    color: const Color(0xFF0F172A),
+                    color: AppTheme.primaryText(context),
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   tr('student_dashboard_hint'),
                   style: theme.textTheme.bodyMedium?.copyWith(
-                    color: const Color(0xFF64748B),
+                    color: AppTheme.mutedText(context),
                   ),
                 ),
                 const SizedBox(height: 20),
                 if (nextExam != null)
                   _NextExamCard(
                     exam: nextExam,
-                    countdown: _formatCountdown(nextExam.startTime),
+                    countdown: _formatCountdown(nextExam.startTime, now),
                     schedule: _formatSchedule(nextExam.startTime),
-                    canStart: !now.isBefore(nextExam.startTime) &&
+                    canStart:
+                        !now.isBefore(nextExam.startTime) &&
                         now.isBefore(nextExam.endTime),
                     onStart: () => context.push('/take-exam/${nextExam.id}'),
                   )
@@ -169,7 +190,8 @@ class ListExamScreen extends ConsumerWidget {
                     (exam) => _ExamListCard(
                       exam: exam,
                       schedule: _formatSchedule(exam.startTime),
-                      canStart: !now.isBefore(exam.startTime) &&
+                      canStart:
+                          !now.isBefore(exam.startTime) &&
                           now.isBefore(exam.endTime),
                       onStart: () => context.push('/take-exam/${exam.id}'),
                     ),
@@ -180,7 +202,9 @@ class ListExamScreen extends ConsumerWidget {
                 if (results.isEmpty)
                   _EmptyStateCard(message: tr('no_history'))
                 else
-                  ...results.take(3).map((result) => _HistoryRow(result: result)),
+                  ...results
+                      .take(3)
+                      .map((result) => _HistoryRow(result: result)),
               ],
             ),
           );
@@ -213,17 +237,24 @@ class _NextExamCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppTheme.cardBackground(context),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: AppTheme.borderColor(context)),
         boxShadow: const [
-          BoxShadow(color: Color(0x140F172A), blurRadius: 18, offset: Offset(0, 10)),
+          BoxShadow(
+            color: Color(0x140F172A),
+            blurRadius: 18,
+            offset: Offset(0, 10),
+          ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _Badge(icon: Icons.calendar_month_outlined, label: tr('upcoming_exam')),
+          _Badge(
+            icon: Icons.calendar_month_outlined,
+            label: tr('upcoming_exam'),
+          ),
           const SizedBox(height: 16),
           Text(
             exam.title,
@@ -233,12 +264,15 @@ class _NextExamCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-          Text(schedule, style: const TextStyle(color: Color(0xFF64748B))),
+          Text(schedule, style: TextStyle(color: AppTheme.mutedText(context))),
           const SizedBox(height: 18),
           Row(
             children: [
               Expanded(
-                child: _CountdownBox(value: countdown, label: tr('time_remaining')),
+                child: _CountdownBox(
+                  value: countdown,
+                  label: tr('time_remaining'),
+                ),
               ),
               const SizedBox(width: 12),
               ElevatedButton.icon(
@@ -274,9 +308,11 @@ class _ExamListCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppTheme.cardBackground(context),
         borderRadius: BorderRadius.circular(16),
-        border: const Border(left: BorderSide(color: Color(0xFF00288E), width: 4)),
+        border: const Border(
+          left: BorderSide(color: Color(0xFF00288E), width: 4),
+        ),
       ),
       child: Row(
         children: [
@@ -296,7 +332,9 @@ class _ExamListCard extends StatelessWidget {
                 const SizedBox(height: 6),
                 Text(
                   '$schedule | ${exam.duration} ${tr('minutes')} | ${exam.totalQuestions} ${tr('question')}',
-                  style: theme.textTheme.bodySmall?.copyWith(color: const Color(0xFF64748B)),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: AppTheme.mutedText(context),
+                  ),
                 ),
               ],
             ),
@@ -325,7 +363,7 @@ class _HistoryRow extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppTheme.cardBackground(context),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Row(
@@ -375,7 +413,7 @@ class _StatCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppTheme.cardBackground(context),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
@@ -390,12 +428,21 @@ class _StatCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(value, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 18,
+                  ),
+                ),
                 Text(
                   label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Color(0xFF64748B), fontSize: 12),
+                  style: TextStyle(
+                    color: AppTheme.mutedText(context),
+                    fontSize: 12,
+                  ),
                 ),
               ],
             ),
@@ -493,15 +540,21 @@ class _CountdownBox extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
+        color: AppTheme.subtleBackground(context),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: AppTheme.borderColor(context)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(value, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
-          Text(label, style: const TextStyle(fontSize: 11, color: Color(0xFF64748B))),
+          Text(
+            value,
+            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
+          ),
+          Text(
+            label,
+            style: TextStyle(fontSize: 11, color: AppTheme.mutedText(context)),
+          ),
         ],
       ),
     );
@@ -519,11 +572,14 @@ class _EmptyStateCard extends StatelessWidget {
       padding: const EdgeInsets.all(28),
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppTheme.cardBackground(context),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: AppTheme.borderColor(context)),
       ),
-      child: Text(message, style: const TextStyle(color: Color(0xFF64748B))),
+      child: Text(
+        message,
+        style: TextStyle(color: AppTheme.mutedText(context)),
+      ),
     );
   }
 }

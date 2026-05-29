@@ -4,7 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/themes/app_theme.dart';
-import '../../../shared/models/exam_model.dart';
+import '../../../core/providers/app_preferences_provider.dart';
+import '../../../shared/models/user_model.dart';
 import '../../admin/providers/admin_provider.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../providers/professor_exam_provider.dart';
@@ -12,164 +13,58 @@ import '../providers/professor_exam_provider.dart';
 class ProfDashboardScreen extends ConsumerWidget {
   const ProfDashboardScreen({super.key});
 
-  Future<void> _deleteExam(
-    BuildContext context,
-    WidgetRef ref,
-    ExamModel exam,
-  ) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(tr('delete_exam')),
-        content: Text(tr('delete_exam_confirm')),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text(tr('no')),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-            ),
-            onPressed: () => Navigator.pop(context, true),
-            child: Text(tr('delete')),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-
-    try {
-      await ref.read(professorRepositoryProvider).deleteExam(exam);
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(tr('exam_deleted'))),
-      );
-    } catch (_) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(tr('exam_delete_locked')),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-
-  Future<void> _publishExam(
-    BuildContext context,
-    WidgetRef ref,
-    ExamModel exam,
-  ) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(tr('publish_exam')),
-        content: Text(tr('publish_exam_confirm')),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text(tr('cancel')),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text(tr('publish')),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-
-    try {
-      final uid = ref.read(authRepositoryProvider).currentUid ?? '';
-      final subjects = ref.read(teacherSubjectsProvider(uid)).value ?? const [];
-      final subject = subjects
-          .where((subject) => subject.id == exam.subjectId)
-          .firstOrNull;
-      await ref.read(professorRepositoryProvider).publishExam(
-            exam: exam,
-            subject: subject,
-            publisherId: uid,
-          );
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(tr('exam_published'))),
-      );
-    } catch (e) {
-      if (!context.mounted) return;
-      final key = e.toString().contains('publish_requires_questions')
-          ? 'publish_requires_questions'
-          : 'error_occurred';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(tr(key)), backgroundColor: Colors.red),
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final uid = ref.read(authRepositoryProvider).currentUid;
     final user = ref.watch(userProfileProvider).value;
     if (uid == null) {
-      return Scaffold(
-        appBar: AppBar(title: Text(tr('prof_dashboard'))),
-        body: Center(child: Text(tr('auth_failed'))),
-      );
+      return Scaffold(body: Center(child: Text(tr('auth_failed'))));
     }
 
-    final examsAsync = ref.watch(myExamsProvider(uid));
+    final examsAsync = ref.watch(allExamsProvider);
+    final subjectsAsync = ref.watch(teacherSubjectsProvider(uid));
+    final users = ref.watch(allUsersProvider).value ?? const <UserModel>[];
     final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(
-        toolbarHeight: 84,
-        automaticallyImplyLeading: false,
-        titleSpacing: 20,
-        title: Row(
-          children: [
-            Container(
-              width: 46,
-              height: 46,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(14),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0x22CBD5E1),
-                    blurRadius: 14,
-                    offset: Offset(5, 6),
-                  ),
-                ],
-              ),
-              child: const Icon(
-                Icons.school_outlined,
-                color: AppTheme.primaryColor,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Text(
-              tr('app_name'),
-              style: theme.textTheme.titleLarge?.copyWith(
-                color: AppTheme.primaryColor,
-                fontSize: 30,
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            onPressed: () {},
-            icon: const Icon(Icons.notifications_none_rounded),
-          ),
-          const SizedBox(width: 8),
-        ],
-      ),
       body: examsAsync.when(
         data: (exams) {
-          final activeToday = exams.where((exam) => exam.isActive).toList();
+          final subjects = subjectsAsync.value ?? const [];
+          final assignedSubjectIds = subjects
+              .map((subject) => subject.id)
+              .toSet();
+          final selectedSubjectId =
+              ref.watch(selectedSubjectOverrideProvider) ??
+              user?.selectedSubjectId ??
+              '';
+          final scopedExams = exams.where((exam) {
+            final assigned = assignedSubjectIds.contains(exam.subjectId);
+            final selected =
+                selectedSubjectId.isEmpty ||
+                exam.subjectId == selectedSubjectId;
+            return assigned && selected;
+          }).toList();
+          final activeExams = scopedExams
+              .where((exam) => exam.isActive && exam.published)
+              .toList();
+          final assignedStudentIds = subjects
+              .where(
+                (subject) =>
+                    selectedSubjectId.isEmpty ||
+                    subject.id == selectedSubjectId,
+              )
+              .expand((subject) => subject.studentIds)
+              .toSet();
+          final totalStudents = users
+              .where(
+                (student) =>
+                    student.isStudent &&
+                    assignedStudentIds.contains(student.uid),
+              )
+              .length;
+
           return ListView(
-            padding: const EdgeInsets.fromLTRB(20, 28, 20, 110),
+            padding: const EdgeInsets.fromLTRB(20, 24, 20, 110),
             children: [
               Text(
                 '${tr('welcome_teacher')}, ${user?.name ?? tr('teacher')}',
@@ -189,13 +84,13 @@ class ProfDashboardScreen extends ConsumerWidget {
                     _StatCard(
                       icon: Icons.assignment_outlined,
                       label: tr('total_exams'),
-                      value: '${exams.length}',
+                      value: '${scopedExams.length}',
                       color: AppTheme.primaryColor,
                     ),
                     _StatCard(
                       icon: Icons.groups_outlined,
                       label: tr('total_students'),
-                      value: '128',
+                      value: '$totalStudents',
                       color: AppTheme.successColor,
                     ),
                     _StatCard(
@@ -219,52 +114,31 @@ class ProfDashboardScreen extends ConsumerWidget {
                       ),
                     ),
                   ),
-                  TextButton(onPressed: () {}, child: Text(tr('see_all'))),
+                  TextButton(
+                    onPressed: () => context.go('/prof-dashboard/exams'),
+                    child: Text(tr('see_all')),
+                  ),
                 ],
               ),
               const SizedBox(height: 14),
-              if (activeToday.isEmpty)
-                _EmptyExamCard(
-                  onTap: () => context.push('/prof-dashboard/create-exam'),
-                )
+              if (activeExams.isEmpty)
+                const _EmptyExamCard()
               else
-                ...activeToday.map(
+                ...activeExams.map(
                   (exam) => _TeacherExamCard(
-                    examId: exam.id,
                     title: exam.title,
                     subject: exam.subject,
-                    startTime: exam.startTime,
                     duration: exam.duration,
                     totalQuestions: exam.totalQuestions,
-                    published: exam.published,
-                    onQuestions: () => context.push(
-                      '/prof-dashboard/exam/${exam.id}/manage-questions',
-                    ),
-                    onEdit: () => context.push(
-                      '/prof-dashboard/exam/${exam.id}/edit',
-                    ),
                     onResults: () =>
                         context.push('/prof-dashboard/exam/${exam.id}/results'),
-                    onDelete: () => _deleteExam(context, ref, exam),
-                    onPublish: () => _publishExam(context, ref, exam),
                   ),
                 ),
-              const SizedBox(height: 18),
-              _DashedCreateCard(
-                onTap: () => context.push('/prof-dashboard/create-exam'),
-              ),
             ],
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Error: $e')),
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: AppTheme.primaryColor,
-        foregroundColor: Colors.white,
-        icon: const Icon(Icons.add_circle_outline_rounded),
-        label: Text(tr('create_exam')),
-        onPressed: () => context.push('/prof-dashboard/create-exam'),
       ),
     );
   }
@@ -290,7 +164,7 @@ class _StatCard extends StatelessWidget {
       margin: const EdgeInsets.only(right: 16),
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppTheme.cardBackground(context),
         borderRadius: BorderRadius.circular(16),
         boxShadow: const [
           BoxShadow(
@@ -321,15 +195,15 @@ class _StatCard extends StatelessWidget {
                   label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Color(0xFF757684),
+                  style: TextStyle(
+                    color: AppTheme.mutedText(context),
                     fontWeight: FontWeight.w700,
                   ),
                 ),
                 Text(
                   value,
-                  style: const TextStyle(
-                    color: Color(0xFF191C1E),
+                  style: TextStyle(
+                    color: AppTheme.primaryText(context),
                     fontSize: 24,
                     fontWeight: FontWeight.w900,
                   ),
@@ -345,47 +219,26 @@ class _StatCard extends StatelessWidget {
 
 class _TeacherExamCard extends StatelessWidget {
   const _TeacherExamCard({
-    required this.examId,
     required this.title,
     required this.subject,
-    required this.startTime,
     required this.duration,
     required this.totalQuestions,
-    required this.published,
-    required this.onQuestions,
-    required this.onEdit,
     required this.onResults,
-    required this.onDelete,
-    required this.onPublish,
   });
 
-  final String examId;
   final String title;
   final String subject;
-  final DateTime startTime;
   final int duration;
   final int totalQuestions;
-  final bool published;
-  final VoidCallback onQuestions;
-  final VoidCallback onEdit;
   final VoidCallback onResults;
-  final VoidCallback onDelete;
-  final VoidCallback onPublish;
 
   @override
   Widget build(BuildContext context) {
-    return Consumer(
-      builder: (context, ref, _) {
-        final hasResults = ref.watch(examHasResultsProvider(examId)).value ?? true;
-        final canDelete =
-            !published && DateTime.now().isBefore(startTime) && !hasResults;
-        final canPublish = !published && totalQuestions > 0;
-
-        return Container(
+    return Container(
       margin: const EdgeInsets.only(bottom: 20),
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppTheme.cardBackground(context),
         borderRadius: BorderRadius.circular(16),
         boxShadow: const [
           BoxShadow(
@@ -441,55 +294,24 @@ class _TeacherExamCard extends StatelessWidget {
                   children: [
                     const Icon(Icons.schedule_rounded, size: 16),
                     const SizedBox(width: 6),
-                    Text('$duration ${tr('minutes')} • $totalQuestions soal'),
+                    Text('$duration ${tr('minutes')} - $totalQuestions soal'),
                   ],
                 ),
                 const SizedBox(height: 20),
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.primaryColor,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        onPressed: onResults,
-                        child: Text(tr('monitor_live')),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.primaryColor,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    IconButton.filledTonal(
-                      tooltip: tr('edit_questions'),
-                      onPressed: onQuestions,
-                      icon: const Icon(Icons.quiz_outlined),
-                    ),
-                    const SizedBox(width: 8),
-                    IconButton.filledTonal(
-                      tooltip: tr('edit_exam'),
-                      onPressed: onEdit,
-                      icon: const Icon(Icons.settings_outlined),
-                    ),
-                    const SizedBox(width: 8),
-                    IconButton.filledTonal(
-                      tooltip: canDelete
-                          ? tr('delete_exam')
-                          : tr('exam_delete_locked'),
-                      onPressed: canDelete ? onDelete : null,
-                      icon: const Icon(Icons.delete_outline),
-                    ),
-                    const SizedBox(width: 8),
-                    IconButton.filledTonal(
-                      tooltip: published
-                          ? tr('exam_already_published')
-                          : tr('publish_exam'),
-                      onPressed: canPublish ? onPublish : null,
-                      icon: const Icon(Icons.campaign_outlined),
-                    ),
-                  ],
+                    onPressed: onResults,
+                    child: Text(tr('monitor_live')),
+                  ),
                 ),
               ],
             ),
@@ -497,55 +319,34 @@ class _TeacherExamCard extends StatelessWidget {
         ],
       ),
     );
-      },
-    );
-  }
-}
-
-class _DashedCreateCard extends StatelessWidget {
-  const _DashedCreateCard({required this.onTap});
-
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(16),
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 30),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFC4C5D5), width: 1.5),
-        ),
-        child: Column(
-          children: [
-            CircleAvatar(
-              backgroundColor: const Color(0xFFF1F5F9),
-              child: const Icon(Icons.add, color: Color(0xFF757684)),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              tr('schedule_another_exam'),
-              style: const TextStyle(
-                color: Color(0xFF757684),
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }
 
 class _EmptyExamCard extends StatelessWidget {
-  const _EmptyExamCard({required this.onTap});
-
-  final VoidCallback onTap;
+  const _EmptyExamCard();
 
   @override
   Widget build(BuildContext context) {
-    return _DashedCreateCard(onTap: onTap);
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 30),
+      decoration: BoxDecoration(
+        color: AppTheme.cardBackground(context),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppTheme.borderColor(context)),
+      ),
+      child: Column(
+        children: [
+          Icon(Icons.assignment_outlined, color: AppTheme.mutedText(context)),
+          const SizedBox(height: 12),
+          Text(
+            tr('empty_exam'),
+            style: TextStyle(
+              color: AppTheme.mutedText(context),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

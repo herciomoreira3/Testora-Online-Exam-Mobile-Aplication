@@ -23,7 +23,8 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   Future<void> _routeNext() async {
     if (!mounted) return;
 
-    final authUser = ref.read(authStateProvider).value;
+    final authUser = await ref.read(authStateProvider.future);
+    if (!mounted) return;
     if (authUser == null) {
       context.go('/login');
       return;

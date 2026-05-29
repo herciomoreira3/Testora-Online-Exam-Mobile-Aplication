@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/themes/app_theme.dart';
 import '../../../shared/widgets/custom_button.dart';
 import '../../../shared/widgets/custom_textfield.dart';
+import '../../../core/providers/app_preferences_provider.dart';
 import '../../admin/providers/admin_provider.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../providers/professor_exam_provider.dart';
@@ -89,7 +91,7 @@ class _CreateExamScreenState extends ConsumerState<CreateExamScreen> {
         _isActive = data['isActive'] != false;
         _notificationLeadMinutes =
             int.tryParse(data['notificationLeadMinutes']?.toString() ?? '') ??
-                10;
+            10;
       });
     } catch (e) {
       if (!mounted) return;
@@ -144,22 +146,33 @@ class _CreateExamScreenState extends ConsumerState<CreateExamScreen> {
       return;
     }
 
-    final role = ref.read(userProfileProvider).value?.role;
-    final subjects = role == 'admin'
+    final user = ref.read(userProfileProvider).value;
+    final role = user?.role;
+    final selectedSubjectId =
+        ref.read(selectedSubjectOverrideProvider) ??
+        user?.selectedSubjectId ??
+        '';
+    final assignedSubjects = role == 'admin'
         ? ref.read(subjectsProvider).value ?? const []
         : ref.read(teacherSubjectsProvider(uid)).value ?? const [];
+    final subjects = role == 'teacher' && selectedSubjectId.isNotEmpty
+        ? assignedSubjects
+              .where((subject) => subject.id == selectedSubjectId)
+              .toList()
+        : assignedSubjects;
     final selectedSubject = subjects
         .where((subject) => subject.id == _selectedSubjectId)
         .firstOrNull;
     if (selectedSubject == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(tr('select_subject_required'))),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(tr('select_subject_required'))));
       setState(() => _isSubmitting = false);
       return;
     }
 
     final subject = selectedSubject.name;
+    final nextStatus = role == 'admin' ? 'sending' : 'draft';
     final data = {
       'title': _titleController.text.trim(),
       'subject': subject,
@@ -173,7 +186,7 @@ class _CreateExamScreenState extends ConsumerState<CreateExamScreen> {
       'antiCheatEnabled': _antiCheatEnabled,
       'isActive': _isActive,
       'published': false,
-      'status': 'wait',
+      'status': nextStatus,
       'notificationLeadMinutes': _notificationLeadMinutes,
       'updatedAt': Timestamp.fromDate(DateTime.now()),
     };
@@ -227,7 +240,7 @@ class _CreateExamScreenState extends ConsumerState<CreateExamScreen> {
       if (role == 'admin') {
         context.go('/admin/exams');
       } else {
-        context.go('/prof-dashboard');
+        context.go('/prof-dashboard/exams');
       }
     } catch (e) {
       if (!mounted) {
@@ -247,12 +260,17 @@ class _CreateExamScreenState extends ConsumerState<CreateExamScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final uid = ref.watch(authRepositoryProvider).currentUid;
-    final role = ref.watch(userProfileProvider).value?.role;
+    final user = ref.watch(userProfileProvider).value;
+    final role = user?.role;
+    final activeSubjectId =
+        ref.watch(selectedSubjectOverrideProvider) ??
+        user?.selectedSubjectId ??
+        '';
     final subjectsAsync = role == 'admin'
         ? ref.watch(subjectsProvider)
         : uid == null
-            ? const AsyncValue.data([])
-            : ref.watch(teacherSubjectsProvider(uid));
+        ? const AsyncValue.data([])
+        : ref.watch(teacherSubjectsProvider(uid));
     final materialLocalizations = MaterialLocalizations.of(context);
     final dateLabel =
         '${materialLocalizations.formatFullDate(_startTime)} ${materialLocalizations.formatTimeOfDay(TimeOfDay.fromDateTime(_startTime))}';
@@ -267,7 +285,17 @@ class _CreateExamScreenState extends ConsumerState<CreateExamScreen> {
 
     return subjectsAsync.when(
       data: (subjects) {
-        _selectedSubjectId ??= subjects.firstOrNull?.id;
+        final scopedSubjects = role == 'teacher' && activeSubjectId.isNotEmpty
+            ? subjects
+                  .where((subject) => subject.id == activeSubjectId)
+                  .toList()
+            : subjects;
+        if (_selectedSubjectId == null ||
+            !scopedSubjects.any(
+              (subject) => subject.id == _selectedSubjectId,
+            )) {
+          _selectedSubjectId = scopedSubjects.firstOrNull?.id;
+        }
         return Scaffold(
           appBar: AppBar(title: Text(title)),
           body: SafeArea(
@@ -299,7 +327,7 @@ class _CreateExamScreenState extends ConsumerState<CreateExamScreen> {
                         labelText: tr('subject'),
                         prefixIcon: const Icon(Icons.menu_book_outlined),
                       ),
-                      items: subjects
+                      items: scopedSubjects
                           .map(
                             (subject) => DropdownMenuItem<String>(
                               value: subject.id,
@@ -310,7 +338,7 @@ class _CreateExamScreenState extends ConsumerState<CreateExamScreen> {
                       onChanged: role == 'teacher'
                           ? null
                           : (value) =>
-                              setState(() => _selectedSubjectId = value),
+                                setState(() => _selectedSubjectId = value),
                       validator: (value) => value == null || value.isEmpty
                           ? tr('required_field')
                           : null,
@@ -320,7 +348,7 @@ class _CreateExamScreenState extends ConsumerState<CreateExamScreen> {
                       Text(
                         tr('teacher_subject_locked'),
                         style: theme.textTheme.bodySmall?.copyWith(
-                          color: const Color(0xFF64748B),
+                          color: AppTheme.mutedText(context),
                         ),
                       ),
                     ],
@@ -390,42 +418,44 @@ class _CreateExamScreenState extends ConsumerState<CreateExamScreen> {
                             onChanged: (v) =>
                                 setState(() => _antiCheatEnabled = v),
                           ),
-                      SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: Text(tr('is_active')),
-                        value: _isActive,
-                        onChanged: (v) => setState(() => _isActive = v),
+                          SwitchListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(tr('is_active')),
+                            value: _isActive,
+                            onChanged: (v) => setState(() => _isActive = v),
+                          ),
+                          const Divider(),
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: const Icon(
+                              Icons.notifications_active_outlined,
+                            ),
+                            title: Text(tr('notification_before_exam')),
+                            subtitle: Text(
+                              '$_notificationLeadMinutes ${tr('minutes')}',
+                            ),
+                          ),
+                          DropdownButtonFormField<int>(
+                            initialValue: _notificationLeadMinutes,
+                            decoration: InputDecoration(
+                              labelText: tr('notification_before_exam'),
+                            ),
+                            items: [5, 10, 15, 30, 60]
+                                .map(
+                                  (minutes) => DropdownMenuItem(
+                                    value: minutes,
+                                    child: Text('$minutes ${tr('minutes')}'),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (value) {
+                              if (value == null) return;
+                              setState(() => _notificationLeadMinutes = value);
+                            },
+                          ),
+                        ],
                       ),
-                      const Divider(),
-                      ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: const Icon(Icons.notifications_active_outlined),
-                        title: Text(tr('notification_before_exam')),
-                        subtitle: Text(
-                          '$_notificationLeadMinutes ${tr('minutes')}',
-                        ),
-                      ),
-                      DropdownButtonFormField<int>(
-                        initialValue: _notificationLeadMinutes,
-                        decoration: InputDecoration(
-                          labelText: tr('notification_before_exam'),
-                        ),
-                        items: [5, 10, 15, 30, 60]
-                            .map(
-                              (minutes) => DropdownMenuItem(
-                                value: minutes,
-                                child: Text('$minutes ${tr('minutes')}'),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (value) {
-                          if (value == null) return;
-                          setState(() => _notificationLeadMinutes = value);
-                        },
-                      ),
-                    ],
-                  ),
-                ),
+                    ),
                     const SizedBox(height: 20),
                     CustomButton(
                       text: _isEditing
@@ -441,9 +471,8 @@ class _CreateExamScreenState extends ConsumerState<CreateExamScreen> {
           ),
         );
       },
-      loading: () => const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      ),
+      loading: () =>
+          const Scaffold(body: Center(child: CircularProgressIndicator())),
       error: (error, _) => Scaffold(
         body: Center(child: Text('${tr('error_occurred')}: $error')),
       ),
@@ -461,9 +490,9 @@ class _SectionCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppTheme.cardBackground(context),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: AppTheme.borderColor(context)),
         boxShadow: [
           BoxShadow(
             color: const Color(0xFF1E40AF).withValues(alpha: 0.06),

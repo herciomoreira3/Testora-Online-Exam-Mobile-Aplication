@@ -13,9 +13,10 @@ class ExamRepository {
         .where('isActive', isEqualTo: true)
         .snapshots()
         .map((snapshot) {
+          final now = DateTime.now();
           final exams = snapshot.docs
               .map((doc) => ExamModel.fromMap(doc.data(), doc.id))
-              .where((exam) => exam.published)
+              .where((exam) => exam.published && now.isBefore(exam.endTime))
               .toList();
           exams.sort((a, b) => a.startTime.compareTo(b.startTime));
           return exams;

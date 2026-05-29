@@ -10,12 +10,13 @@ final authStateProvider = StreamProvider((ref) {
   return ref.watch(authRepositoryProvider).authStateChanges;
 });
 
-final userProfileProvider = FutureProvider<UserModel?>((ref) async {
-  // Wait for the auth state stream to emit its first value to avoid
-  // returning `null` prematurely while providers are still initializing.
+final userProfileProvider = StreamProvider<UserModel?>((ref) async* {
   final authState = await ref.watch(authStateProvider.future);
-  if (authState == null) return null;
-  return ref.read(authRepositoryProvider).getUserProfile(authState.uid);
+  if (authState == null) {
+    yield null;
+    return;
+  }
+  yield* ref.read(authRepositoryProvider).watchUserProfile(authState.uid);
 });
 
 class AuthController extends Notifier<AsyncValue<void>> {
@@ -83,11 +84,17 @@ class AuthController extends Notifier<AsyncValue<void>> {
     }
   }
 
-  Future<void> logout() async {
+  Future<bool> logout() async {
     state = const AsyncLoading();
-    await ref.read(authRepositoryProvider).signOut();
-    ref.invalidate(userProfileProvider);
-    state = const AsyncData(null);
+    try {
+      await ref.read(authRepositoryProvider).signOut();
+      ref.invalidate(userProfileProvider);
+      state = const AsyncData(null);
+      return true;
+    } catch (e, st) {
+      state = AsyncError(e.toString(), st);
+      return false;
+    }
   }
 }
 

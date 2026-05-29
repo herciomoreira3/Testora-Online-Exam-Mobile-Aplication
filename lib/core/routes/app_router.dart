@@ -20,6 +20,7 @@ import '../../features/history/presentation/history_screen.dart';
 import '../../features/professor/presentation/create_exam_screen.dart';
 import '../../features/professor/presentation/manage_questions_screen.dart';
 import '../../features/professor/presentation/prof_dashboard_screen.dart';
+import '../../features/professor/presentation/professor_exams_screen.dart';
 import '../../features/professor/presentation/teacher_results_screen.dart';
 import '../../features/professor/presentation/teacher_students_screen.dart';
 import '../../features/professor/presentation/view_results_screen.dart';
@@ -47,14 +48,14 @@ class GoRouterRefreshStream extends ChangeNotifier {
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   final authRepo = ref.watch(authRepositoryProvider);
-  final authState = ref.watch(authStateProvider);
-  final userProfileAsync = ref.watch(userProfileProvider);
 
   return GoRouter(
     initialLocation: '/splash',
     refreshListenable: GoRouterRefreshStream(authRepo.authStateChanges),
     redirect: (context, state) {
-      final isLoggedIn = authState.value != null;
+      final authState = ref.read(authStateProvider);
+      final userProfileAsync = ref.read(userProfileProvider);
+      final isLoggedIn = authRepo.currentUid != null || authState.value != null;
       final location = state.matchedLocation;
       final isSplash = location == '/splash';
       final isLoggingIn = location == '/login';
@@ -68,15 +69,20 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       }
 
       if (isLoggingIn || isRegistering) {
-        final role = userProfileAsync.value?.role;
-        if (role == null) return null;
+        if (userProfileAsync.isLoading) return null;
+        final role = userProfileAsync.value?.role ?? '';
         if (role == 'admin') return '/admin-dashboard';
         if (role == 'teacher') return '/prof-dashboard';
-        return '/home';
+        if (role == 'student') return '/home';
+        return null;
       }
 
-      final role = userProfileAsync.value?.role;
-      if (role != null) {
+      if (userProfileAsync.isLoading) return null;
+      final role = userProfileAsync.value?.role ?? '';
+      if (role.isEmpty) {
+        return '/login';
+      }
+      if (role.isNotEmpty) {
         final isAdmin = role == 'admin';
         final isTeacher = role == 'teacher';
         final isStudent = !(isAdmin || isTeacher);
@@ -200,12 +206,16 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const TeacherStudentsScreen(),
           ),
           GoRoute(
-            path: '/prof-dashboard/results',
-            builder: (context, state) => const TeacherResultsScreen(),
+            path: '/prof-dashboard/exams',
+            builder: (context, state) => const ProfessorExamsScreen(),
           ),
           GoRoute(
-            path: '/prof-dashboard/create-exam',
+            path: '/prof-dashboard/exams/create',
             builder: (context, state) => const CreateExamScreen(),
+          ),
+          GoRoute(
+            path: '/prof-dashboard/results',
+            builder: (context, state) => const TeacherResultsScreen(),
           ),
           GoRoute(
             path: '/prof-dashboard/exam/:examId/edit',

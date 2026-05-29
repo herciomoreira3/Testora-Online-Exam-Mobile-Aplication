@@ -12,6 +12,8 @@ class AlertModel {
     required this.createdAt,
     required this.examEndTime,
     this.examId = '',
+    this.subjectId = '',
+    this.subject = '',
   });
 
   final String id;
@@ -24,8 +26,12 @@ class AlertModel {
   final DateTime createdAt;
   final DateTime examEndTime;
   final String examId;
+  final String subjectId;
+  final String subject;
 
   bool get isExpired => DateTime.now().isAfter(examEndTime);
+
+  bool isReadBy(String uid) => readBy.contains(uid);
 
   static DateTime _date(dynamic value) {
     if (value is Timestamp) return value.toDate();
@@ -57,6 +63,8 @@ class AlertModel {
         DateTime.now().add(const Duration(days: 365)),
       ),
       examId: map['examId']?.toString() ?? '',
+      subjectId: map['subjectId']?.toString() ?? '',
+      subject: map['subject']?.toString() ?? '',
     );
   }
 }

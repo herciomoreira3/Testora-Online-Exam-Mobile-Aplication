@@ -72,41 +72,40 @@ class AuthRepository {
   Future<void> _ensureApprovedProfile(User? user) async {
     if (user == null) throw 'auth_failed';
 
-    final uidDoc = await _firestore.collection('users').doc(user.uid).get();
-    if (uidDoc.exists && uidDoc.data() != null) {
-      final profile = UserModel.fromMap(uidDoc.data()!, uidDoc.id);
-      if (profile.isActive && profile.role.isNotEmpty) {
-        return;
-      }
-      await signOut();
-      throw 'account_not_approved';
-    }
-
     final email = user.email?.trim().toLowerCase();
     if (email == null || email.isEmpty) {
       await signOut();
       throw 'account_not_approved';
     }
 
-    final byEmail = await _firestore
-        .collection('users')
-        .where('emailLower', isEqualTo: email)
-        .limit(1)
-        .get();
-
-    QueryDocumentSnapshot<Map<String, dynamic>>? approvedDoc;
-    if (byEmail.docs.isNotEmpty) {
-      approvedDoc = byEmail.docs.first;
-    } else {
-      final legacyEmail = await _firestore
-          .collection('users')
-          .where('email', isEqualTo: user.email)
-          .limit(1)
-          .get();
-      if (legacyEmail.docs.isNotEmpty) {
-        approvedDoc = legacyEmail.docs.first;
+    final uidDoc = await _firestore.collection('users').doc(user.uid).get();
+    if (uidDoc.exists && uidDoc.data() != null) {
+      final profile = UserModel.fromMap(uidDoc.data()!, uidDoc.id);
+      if (profile.isActive && profile.role.isNotEmpty) {
+        await _refreshGoogleProfile(user, uidDoc.data()!, email);
+        return;
       }
+
+      final approvedDoc = await _findApprovedProfileByEmail(
+        email: email,
+        rawEmail: user.email,
+        currentUid: user.uid,
+      );
+      if (approvedDoc != null) {
+        await _activateApprovedProfile(user, approvedDoc, email);
+        return;
+      }
+
+      await _createPendingGoogleUser(user, email);
+      await signOut();
+      throw 'account_not_approved';
     }
+
+    final approvedDoc = await _findApprovedProfileByEmail(
+      email: email,
+      rawEmail: user.email,
+      currentUid: user.uid,
+    );
 
     if (approvedDoc == null) {
       await _createPendingGoogleUser(user, email);
@@ -114,9 +113,54 @@ class AuthRepository {
       throw 'account_not_approved';
     }
 
+    await _activateApprovedProfile(user, approvedDoc, email);
+  }
+
+  Future<QueryDocumentSnapshot<Map<String, dynamic>>?>
+  _findApprovedProfileByEmail({
+    required String email,
+    required String? rawEmail,
+    required String currentUid,
+  }) async {
+    final candidates = <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+
+    final byEmailLower = await _firestore
+        .collection('users')
+        .where('emailLower', isEqualTo: email)
+        .get();
+    candidates.addAll(byEmailLower.docs);
+
+    for (final value in {rawEmail, email}) {
+      if (value == null || value.trim().isEmpty) continue;
+      final byEmail = await _firestore
+          .collection('users')
+          .where('email', isEqualTo: value.trim())
+          .get();
+      candidates.addAll(byEmail.docs);
+    }
+
+    final unique = <String, QueryDocumentSnapshot<Map<String, dynamic>>>{};
+    for (final candidate in candidates) {
+      unique[candidate.id] = candidate;
+    }
+
+    for (final candidate in unique.values) {
+      final profile = UserModel.fromMap(candidate.data(), candidate.id);
+      if (profile.isActive && profile.role.isNotEmpty) {
+        return candidate;
+      }
+    }
+    return null;
+  }
+
+  Future<void> _activateApprovedProfile(
+    User user,
+    QueryDocumentSnapshot<Map<String, dynamic>> approvedDoc,
+    String email,
+  ) async {
     final approvedData = approvedDoc.data();
     final profile = UserModel.fromMap(approvedData, approvedDoc.id);
-    if (!profile.isActive) {
+    if (!profile.isActive || profile.role.isEmpty) {
       await signOut();
       throw 'account_not_approved';
     }
@@ -127,7 +171,10 @@ class AuthRepository {
       'email': user.email ?? approvedData['email'],
       'emailLower': email,
       'name': approvedData['name'] ?? user.displayName ?? user.email ?? 'User',
-      'photoUrl': approvedData['photoUrl'] ?? user.photoURL ?? '',
+      'role': profile.role,
+      'photoUrl': (approvedData['photoUrl']?.toString().isNotEmpty ?? false)
+          ? approvedData['photoUrl']
+          : user.photoURL ?? '',
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
 
@@ -140,6 +187,21 @@ class AuthRepository {
     }
   }
 
+  Future<void> _refreshGoogleProfile(
+    User user,
+    Map<String, dynamic> currentData,
+    String email,
+  ) async {
+    await _firestore.collection('users').doc(user.uid).set({
+      'uid': user.uid,
+      'email': user.email ?? currentData['email'] ?? email,
+      'emailLower': email,
+      if ((currentData['photoUrl']?.toString().isNotEmpty ?? false) == false)
+        'photoUrl': user.photoURL ?? '',
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
   Future<void> _createPendingGoogleUser(User user, String emailLower) async {
     await _firestore.collection('users').doc(user.uid).set({
       'uid': user.uid,
@@ -150,6 +212,8 @@ class AuthRepository {
       'role': '',
       'language': 'tet',
       'photoUrl': user.photoURL ?? '',
+      'darkMode': false,
+      'selectedSubjectId': '',
       'isActive': true,
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
@@ -220,10 +284,14 @@ class AuthRepository {
 
   // Sign out
   Future<void> signOut() async {
-    if (_googleInitialized) {
-      await _googleSignIn.signOut();
-    }
     await _auth.signOut();
+    if (_googleInitialized) {
+      try {
+        await _googleSignIn.signOut();
+      } catch (_) {
+        // FirebaseAuth is the source of truth for the app session.
+      }
+    }
   }
 
   // Fetch specific user profile details from Firestore
@@ -237,6 +305,38 @@ class AuthRepository {
     } catch (e) {
       return null;
     }
+  }
+
+  Stream<UserModel?> watchUserProfile(String uid) {
+    return _firestore.collection('users').doc(uid).snapshots().map((doc) {
+      final data = doc.data();
+      if (!doc.exists || data == null) return null;
+      return UserModel.fromMap(data, doc.id);
+    });
+  }
+
+  Future<void> updateUserPreferences(
+    String uid,
+    Map<String, dynamic> data,
+  ) async {
+    await _firestore.collection('users').doc(uid).set({
+      ...data,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
+  Future<void> updateOneSignalSubscription({
+    required String uid,
+    String? subscriptionId,
+    String? token,
+    bool? optedIn,
+  }) async {
+    await _firestore.collection('users').doc(uid).set({
+      'oneSignalSubscriptionId': subscriptionId ?? '',
+      'oneSignalPushToken': token ?? '',
+      'oneSignalOptedIn': optedIn == true,
+      'oneSignalUpdatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
   }
 
   // Helper mapping Firebase Exception messages to Tetun

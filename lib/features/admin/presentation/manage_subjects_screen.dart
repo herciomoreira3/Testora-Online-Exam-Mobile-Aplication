@@ -2,6 +2,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/themes/app_theme.dart';
 import '../../../shared/models/subject_model.dart';
 import '../../../shared/models/user_model.dart';
 import '../providers/admin_provider.dart';
@@ -70,9 +71,9 @@ class _ManageSubjectsScreenState extends ConsumerState<ManageSubjectsScreen> {
     if (confirmed != true) return;
     await ref.read(adminRepositoryProvider).deleteSubject(subject.id);
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(tr('subject_deleted'))),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(tr('subject_deleted'))));
     }
   }
 
@@ -83,7 +84,7 @@ class _ManageSubjectsScreenState extends ConsumerState<ManageSubjectsScreen> {
     final theme = Theme.of(context);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F9FC),
+      backgroundColor: AppTheme.pageBackground(context),
       floatingActionButton: FloatingActionButton(
         backgroundColor: theme.colorScheme.primary,
         foregroundColor: Colors.white,
@@ -103,14 +104,14 @@ class _ManageSubjectsScreenState extends ConsumerState<ManageSubjectsScreen> {
                 tr('manage_subjects'),
                 style: theme.textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.w900,
-                  color: const Color(0xFF0F172A),
+                  color: AppTheme.primaryText(context),
                 ),
               ),
               const SizedBox(height: 4),
               Text(
                 tr('manage_subjects_hint'),
                 style: theme.textTheme.bodyMedium?.copyWith(
-                  color: const Color(0xFF64748B),
+                  color: AppTheme.mutedText(context),
                 ),
               ),
               const SizedBox(height: 18),
@@ -164,9 +165,9 @@ class _SubjectCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppTheme.cardBackground(context),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: AppTheme.borderColor(context)),
         boxShadow: const [
           BoxShadow(
             color: Color(0x100F172A),
@@ -202,7 +203,7 @@ class _SubjectCard extends StatelessWidget {
                       subject.name,
                       style: theme.textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w900,
-                        color: const Color(0xFF0F172A),
+                        color: AppTheme.primaryText(context),
                       ),
                     ),
                     if (subject.description.trim().isNotEmpty) ...[
@@ -212,7 +213,7 @@ class _SubjectCard extends StatelessWidget {
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.bodySmall?.copyWith(
-                          color: const Color(0xFF64748B),
+                          color: AppTheme.mutedText(context),
                         ),
                       ),
                     ],
@@ -242,8 +243,9 @@ class _SubjectCard extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
               _SubjectActionButton(
-                tooltip:
-                    hasTeacher ? tr('assign_students') : tr('assign_teacher'),
+                tooltip: hasTeacher
+                    ? tr('assign_students')
+                    : tr('assign_teacher'),
                 icon: hasTeacher
                     ? Icons.group_add_outlined
                     : Icons.person_add_alt_1_outlined,
@@ -281,7 +283,7 @@ class _InfoPill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
+        color: AppTheme.subtleBackground(context),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Row(
@@ -290,11 +292,7 @@ class _InfoPill extends StatelessWidget {
           Icon(icon, size: 18),
           const SizedBox(width: 8),
           Flexible(
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
+            child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
           ),
         ],
       ),
@@ -349,8 +347,9 @@ class _SubjectFormState extends ConsumerState<_SubjectForm> {
   void initState() {
     super.initState();
     _nameController = TextEditingController(text: widget.subject?.name ?? '');
-    _descriptionController =
-        TextEditingController(text: widget.subject?.description ?? '');
+    _descriptionController = TextEditingController(
+      text: widget.subject?.description ?? '',
+    );
   }
 
   @override
@@ -364,7 +363,9 @@ class _SubjectFormState extends ConsumerState<_SubjectForm> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isSaving = true);
     try {
-      await ref.read(adminRepositoryProvider).saveSubject(
+      await ref
+          .read(adminRepositoryProvider)
+          .saveSubject(
             id: widget.subject?.id,
             name: _nameController.text.trim(),
             description: _descriptionController.text.trim(),
@@ -390,9 +391,9 @@ class _SubjectFormState extends ConsumerState<_SubjectForm> {
     final teacher = widget.subject == null
         ? null
         : users
-            .where((user) => widget.subject!.teacherIds.contains(user.uid))
-            .cast<UserModel?>()
-            .firstOrNull;
+              .where((user) => widget.subject!.teacherIds.contains(user.uid))
+              .cast<UserModel?>()
+              .firstOrNull;
 
     return _SheetFrame(
       child: Form(
@@ -403,9 +404,9 @@ class _SubjectFormState extends ConsumerState<_SubjectForm> {
           children: [
             Text(
               widget.subject == null ? tr('add_subject') : tr('edit_subject'),
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w900,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
             ),
             const SizedBox(height: 18),
             TextFormField(
@@ -458,9 +459,9 @@ class _AssignedTeacherPanel extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
+        color: AppTheme.subtleBackground(context),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: AppTheme.borderColor(context)),
       ),
       child: Row(
         children: [
@@ -478,8 +479,8 @@ class _AssignedTeacherPanel extends StatelessWidget {
               children: [
                 Text(
                   tr('assigned_teacher'),
-                  style: const TextStyle(
-                    color: Color(0xFF64748B),
+                  style: TextStyle(
+                    color: AppTheme.mutedText(context),
                     fontSize: 12,
                   ),
                 ),
@@ -553,7 +554,8 @@ class _TeacherAssignmentSheetState
     final teachers = users.where((user) {
       final matchesRole = user.isTeacher;
       final needle = _query.trim().toLowerCase();
-      final matchesSearch = needle.isEmpty ||
+      final matchesSearch =
+          needle.isEmpty ||
           user.name.toLowerCase().contains(needle) ||
           user.email.toLowerCase().contains(needle);
       return matchesRole && matchesSearch;
@@ -566,14 +568,14 @@ class _TeacherAssignmentSheetState
         children: [
           Text(
             tr('assign_teacher'),
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w900,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
           ),
           const SizedBox(height: 4),
           Text(
             widget.subject.name,
-            style: const TextStyle(color: Color(0xFF64748B)),
+            style: TextStyle(color: AppTheme.mutedText(context)),
           ),
           const SizedBox(height: 14),
           _SearchField(
@@ -621,8 +623,7 @@ class _TeacherAssignmentSheetState
           ),
           const SizedBox(height: 16),
           ElevatedButton.icon(
-            onPressed:
-                _isSaving || _selectedTeacherId == null ? null : _save,
+            onPressed: _isSaving || _selectedTeacherId == null ? null : _save,
             icon: _isSaving
                 ? const SizedBox.square(
                     dimension: 18,
@@ -647,7 +648,8 @@ class _StudentAssignmentSheet extends ConsumerStatefulWidget {
       _StudentAssignmentSheetState();
 }
 
-class _StudentAssignmentSheetState extends ConsumerState<_StudentAssignmentSheet> {
+class _StudentAssignmentSheetState
+    extends ConsumerState<_StudentAssignmentSheet> {
   final _searchController = TextEditingController();
   final Set<String> _selectedStudentIds = {};
   String _query = '';
@@ -682,7 +684,8 @@ class _StudentAssignmentSheetState extends ConsumerState<_StudentAssignmentSheet
     final students = users.where((user) {
       final notAssigned = !widget.subject.studentIds.contains(user.uid);
       final needle = _query.trim().toLowerCase();
-      final matchesSearch = needle.isEmpty ||
+      final matchesSearch =
+          needle.isEmpty ||
           user.name.toLowerCase().contains(needle) ||
           user.email.toLowerCase().contains(needle);
       return user.isStudent && notAssigned && matchesSearch;
@@ -695,14 +698,14 @@ class _StudentAssignmentSheetState extends ConsumerState<_StudentAssignmentSheet
         children: [
           Text(
             tr('assign_students'),
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w900,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
           ),
           const SizedBox(height: 4),
           Text(
             widget.subject.name,
-            style: const TextStyle(color: Color(0xFF64748B)),
+            style: TextStyle(color: AppTheme.mutedText(context)),
           ),
           const SizedBox(height: 14),
           _SearchField(
@@ -721,7 +724,9 @@ class _StudentAssignmentSheetState extends ConsumerState<_StudentAssignmentSheet
                     separatorBuilder: (_, __) => const Divider(height: 1),
                     itemBuilder: (context, index) {
                       final student = students[index];
-                      final selected = _selectedStudentIds.contains(student.uid);
+                      final selected = _selectedStudentIds.contains(
+                        student.uid,
+                      );
                       return CheckboxListTile(
                         value: selected,
                         contentPadding: EdgeInsets.zero,
@@ -749,8 +754,7 @@ class _StudentAssignmentSheetState extends ConsumerState<_StudentAssignmentSheet
           ),
           const SizedBox(height: 16),
           ElevatedButton.icon(
-            onPressed:
-                _isSaving || _selectedStudentIds.isEmpty ? null : _save,
+            onPressed: _isSaving || _selectedStudentIds.isEmpty ? null : _save,
             icon: _isSaving
                 ? const SizedBox.square(
                     dimension: 18,
@@ -797,8 +801,8 @@ class _SheetFrame extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
+      decoration: BoxDecoration(
+        color: AppTheme.cardBackground(context),
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       padding: EdgeInsets.only(

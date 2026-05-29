@@ -91,6 +91,11 @@ class MainScaffold extends ConsumerWidget {
           label: tr('students'),
         ),
         BottomNavigationBarItem(
+          icon: const Icon(Icons.assignment_outlined),
+          activeIcon: const Icon(Icons.assignment),
+          label: tr('exams'),
+        ),
+        BottomNavigationBarItem(
           icon: const Icon(Icons.bar_chart_outlined),
           activeIcon: const Icon(Icons.bar_chart),
           label: tr('results'),
@@ -104,6 +109,7 @@ class MainScaffold extends ConsumerWidget {
       tabRoutes = [
         '/prof-dashboard',
         '/prof-dashboard/students',
+        '/prof-dashboard/exams',
         '/prof-dashboard/results',
         '/alerts',
       ];
@@ -129,7 +135,15 @@ class MainScaffold extends ConsumerWidget {
     }
 
     final location = GoRouterState.of(context).uri.toString();
-    var currentIndex = tabRoutes.indexWhere((route) => location.startsWith(route));
+    var currentIndex = -1;
+    var currentMatchLength = -1;
+    for (var index = 0; index < tabRoutes.length; index++) {
+      final route = tabRoutes[index];
+      if (location.startsWith(route) && route.length > currentMatchLength) {
+        currentIndex = index;
+        currentMatchLength = route.length;
+      }
+    }
     if (currentIndex == -1) currentIndex = 0;
 
     return Scaffold(
@@ -158,9 +172,7 @@ class MainScaffold extends ConsumerWidget {
             tooltip: tr('profile'),
             onPressed: () {
               Navigator.of(context, rootNavigator: true).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => const ProfileScreen(),
-                ),
+                MaterialPageRoute<void>(builder: (_) => const ProfileScreen()),
               );
             },
             icon: const Icon(Icons.account_circle_outlined),

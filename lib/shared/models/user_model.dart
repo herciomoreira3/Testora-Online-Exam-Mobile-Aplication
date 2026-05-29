@@ -8,6 +8,8 @@ class UserModel {
   final String role;
   final String language;
   final String photoUrl;
+  final bool darkMode;
+  final String selectedSubjectId;
   final bool isActive;
   final DateTime createdAt;
 
@@ -19,6 +21,8 @@ class UserModel {
     required this.role,
     this.language = 'tet',
     this.photoUrl = '',
+    this.darkMode = false,
+    this.selectedSubjectId = '',
     this.isActive = true,
     required this.createdAt,
   });
@@ -30,7 +34,9 @@ class UserModel {
   static String normalizeRole(String? value) {
     final role = (value ?? '').toLowerCase().trim();
     if (role.isEmpty) return '';
-    if (role == 'admin') return 'admin';
+    if (role == 'admin' || role == 'administrator' || role == 'administrador') {
+      return 'admin';
+    }
     if (role == 'teacher' ||
         role == 'guru' ||
         role == 'professor' ||
@@ -53,6 +59,8 @@ class UserModel {
       'role': role,
       'language': language,
       'photoUrl': photoUrl,
+      'darkMode': darkMode,
+      'selectedSubjectId': selectedSubjectId,
       'isActive': isActive,
       'createdAt': Timestamp.fromDate(createdAt),
     };
@@ -79,9 +87,21 @@ class UserModel {
       role: normalizeRole(map['role'] as String?),
       language: map['language'] ?? 'tet',
       photoUrl: map['photoUrl'] ?? '',
-      isActive: map['isActive'] ?? true,
+      darkMode: map['darkMode'] == true,
+      selectedSubjectId: map['selectedSubjectId']?.toString() ?? '',
+      isActive: _readBool(map['isActive'], fallback: true),
       createdAt: parsedDate,
     );
+  }
+
+  static bool _readBool(dynamic value, {required bool fallback}) {
+    if (value is bool) return value;
+    if (value is String) {
+      final normalized = value.toLowerCase().trim();
+      if (normalized == 'true') return true;
+      if (normalized == 'false') return false;
+    }
+    return fallback;
   }
 
   UserModel copyWith({
@@ -92,6 +112,8 @@ class UserModel {
     String? role,
     String? language,
     String? photoUrl,
+    bool? darkMode,
+    String? selectedSubjectId,
     bool? isActive,
     DateTime? createdAt,
   }) {
@@ -103,6 +125,8 @@ class UserModel {
       role: role ?? this.role,
       language: language ?? this.language,
       photoUrl: photoUrl ?? this.photoUrl,
+      darkMode: darkMode ?? this.darkMode,
+      selectedSubjectId: selectedSubjectId ?? this.selectedSubjectId,
       isActive: isActive ?? this.isActive,
       createdAt: createdAt ?? this.createdAt,
     );

@@ -33,7 +33,7 @@ service cloud.firestore {
     }
 
     match /users/{uid} {
-      allow get: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow get: if signedIn() && (request.auth.uid == uid || isAdmin() || isTeacher());
       allow list: if signedIn();
       allow create: if signedIn() &&
         (request.auth.uid == uid || isAdmin()) &&
@@ -65,18 +65,26 @@ service cloud.firestore {
         isAdmin() ||
         resource.data.teacherId == request.auth.uid ||
         resource.data.createdBy == request.auth.uid ||
-        resource.data.ownerId == request.auth.uid
+        resource.data.ownerId == request.auth.uid ||
+        (
+          isTeacher() &&
+          resource.data.subjectId is string &&
+          exists(/databases/$(database)/documents/subjects/$(resource.data.subjectId)) &&
+          request.auth.uid in get(/databases/$(database)/documents/subjects/$(resource.data.subjectId)).data.teacherIds
+        )
       );
 
-      allow delete: if signedIn() &&
-        resource.data.startTime > request.time &&
-        resource.data.published != true &&
+      allow delete: if signedIn() && (
+        isAdmin() ||
         (
-          isAdmin() ||
-          resource.data.teacherId == request.auth.uid ||
-          resource.data.createdBy == request.auth.uid ||
-          resource.data.ownerId == request.auth.uid
-        );
+          resource.data.published != true &&
+          (
+            resource.data.teacherId == request.auth.uid ||
+            resource.data.createdBy == request.auth.uid ||
+            resource.data.ownerId == request.auth.uid
+          )
+        )
+      );
 
       match /questions/{questionId} {
         allow read: if signedIn() && (
@@ -141,7 +149,7 @@ service cloud.firestore {
     }
 
     match /alerts/{alertId} {
-      allow read: if signedIn() && request.auth.uid in resource.data.recipientIds;
+      allow read: if signedIn() && (isAdmin() || request.auth.uid in resource.data.recipientIds);
       allow create: if signedIn() && (isAdmin() || isTeacher());
       allow update: if signedIn() && request.auth.uid in resource.data.recipientIds;
       allow delete: if signedIn() && (

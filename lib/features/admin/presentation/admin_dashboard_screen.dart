@@ -3,6 +3,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/themes/app_theme.dart';
 import '../../../shared/models/result_model.dart';
 import '../providers/admin_provider.dart';
 
@@ -26,13 +27,14 @@ class AdminDashboardScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final users = ref.watch(allUsersProvider).value ?? const [];
     final subjects = ref.watch(subjectsProvider).value ?? const [];
-    final results = ref.watch(adminResultsProvider).value ?? const <ResultModel>[];
+    final results =
+        ref.watch(adminResultsProvider).value ?? const <ResultModel>[];
     final students = users.where((user) => user.isStudent).length;
     final teachers = users.where((user) => user.isTeacher).length;
     final theme = Theme.of(context);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F9FC),
+      backgroundColor: AppTheme.pageBackground(context),
       body: RefreshIndicator(
         onRefresh: () async {
           ref.invalidate(allUsersProvider);
@@ -46,14 +48,14 @@ class AdminDashboardScreen extends ConsumerWidget {
               tr('admin_overview'),
               style: theme.textTheme.headlineSmall?.copyWith(
                 fontWeight: FontWeight.w800,
-                color: const Color(0xFF0F172A),
+                color: AppTheme.primaryText(context),
               ),
             ),
             const SizedBox(height: 4),
             Text(
               tr('admin_dashboard_hint'),
               style: theme.textTheme.bodyMedium?.copyWith(
-                color: const Color(0xFF64748B),
+                color: AppTheme.mutedText(context),
               ),
             ),
             const SizedBox(height: 20),
@@ -119,13 +121,15 @@ class _WeeklyActivityChart extends StatelessWidget {
       }).length;
       return _ActivityDay(day: day, count: count);
     });
-    final maxCount =
-        days.fold<int>(1, (max, day) => day.count > max ? day.count : max);
+    final maxCount = days.fold<int>(
+      1,
+      (max, day) => day.count > max ? day.count : max,
+    );
 
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppTheme.cardBackground(context),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
@@ -245,9 +249,9 @@ class _AdminStatCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppTheme.cardBackground(context),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: AppTheme.borderColor(context)),
         boxShadow: const [
           BoxShadow(
             color: Color(0x0F0F172A),
@@ -286,8 +290,8 @@ class _AdminStatCard extends StatelessWidget {
                   label,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Color(0xFF64748B),
+                  style: TextStyle(
+                    color: AppTheme.mutedText(context),
                     fontSize: 12,
                     height: 1.1,
                     fontWeight: FontWeight.w700,

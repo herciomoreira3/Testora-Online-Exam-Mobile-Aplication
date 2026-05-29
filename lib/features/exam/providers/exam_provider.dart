@@ -10,6 +10,11 @@ final examRepositoryProvider = Provider<ExamRepository>(
   (ref) => ExamRepository(),
 );
 
+final examClockProvider = StreamProvider<DateTime>((ref) async* {
+  yield DateTime.now();
+  yield* Stream.periodic(const Duration(seconds: 1), (_) => DateTime.now());
+});
+
 final activeExamsProvider = StreamProvider<List<ExamModel>>((ref) {
   return ref.watch(examRepositoryProvider).getActiveExams();
 });
@@ -144,6 +149,7 @@ class ExamSessionNotifier extends Notifier<ExamSessionState?> {
         userId: userId,
         examId: currentSession.exam.id,
         examTitle: currentSession.exam.title,
+        subjectId: currentSession.exam.subjectId,
         score: correctCount,
         percentage: percentage,
         timeTaken: timeTaken,
