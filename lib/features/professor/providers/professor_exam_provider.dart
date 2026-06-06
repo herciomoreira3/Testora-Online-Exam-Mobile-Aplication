@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:easy_localization/easy_localization.dart';
 import '../../admin/providers/admin_provider.dart';
 import '../../../shared/models/exam_model.dart';
 import '../../../shared/models/subject_model.dart';
@@ -95,6 +96,11 @@ class ProfessorRepository {
         .get();
     final adminIds = adminSnapshot.docs.map((doc) => doc.id).toSet().toList();
     final now = Timestamp.fromDate(DateTime.now());
+    final title = tr('alert_exam_sent_publish_title');
+    final message = tr(
+      'alert_exam_sent_publish_message',
+      args: [exam.title, exam.subject],
+    );
 
     final batch = _firestore.batch();
     batch.update(_firestore.collection('exams').doc(exam.id), {
@@ -110,9 +116,11 @@ class ProfessorRepository {
       final alertRef = _firestore.collection('alerts').doc();
       batch.set(alertRef, {
         'type': 'exam_sent_for_publish',
-        'title': 'Ujian hein publish',
-        'message':
-            '${exam.title} (${exam.subject}) haruka ona husi mestre atu admin publish.',
+        'title': title,
+        'titleKey': 'alert_exam_sent_publish_title',
+        'message': message,
+        'messageKey': 'alert_exam_sent_publish_message',
+        'messageArgs': [exam.title, exam.subject],
         'examId': exam.id,
         'examTitle': exam.title,
         'subjectId': exam.subjectId,
@@ -131,9 +139,8 @@ class ProfessorRepository {
     try {
       await _pushService.sendToExternalIds(
         externalIds: adminIds,
-        title: 'Ujian hein publish',
-        message:
-            '${exam.title} (${exam.subject}) haruka ona husi mestre atu admin publish.',
+        title: title,
+        message: message,
         type: 'exam_sent_for_publish',
         examId: exam.id,
       );
@@ -181,13 +188,19 @@ class ProfessorRepository {
       required String type,
       required String title,
       required String message,
+      required String titleKey,
+      required String messageKey,
+      required List<String> messageArgs,
       required DateTime scheduledAt,
     }) {
       final alertRef = _firestore.collection('alerts').doc();
       batch.set(alertRef, {
         'type': type,
         'title': title,
+        'titleKey': titleKey,
         'message': message,
+        'messageKey': messageKey,
+        'messageArgs': messageArgs,
         'examId': exam.id,
         'examTitle': exam.title,
         'subjectId': exam.subjectId,
@@ -213,24 +226,44 @@ class ProfessorRepository {
 
     addAlert(
       type: 'exam_published',
-      title: 'Ujian publish ona',
-      message:
-          '${exam.title} (${exam.subject}) sei hahu iha ${exam.startTime}.',
+      title: tr('alert_exam_published_title'),
+      message: tr(
+        'alert_exam_published_message',
+        args: [exam.title, exam.subject, _formatAlertDateTime(exam.startTime)],
+      ),
+      titleKey: 'alert_exam_published_title',
+      messageKey: 'alert_exam_published_message',
+      messageArgs: [
+        exam.title,
+        exam.subject,
+        _formatAlertDateTime(exam.startTime),
+      ],
       scheduledAt: DateTime.now(),
     );
     addAlert(
       type: 'exam_reminder',
-      title: 'Ujian atu hahu',
-      message:
-          '${exam.title} sei hahu iha ${exam.notificationLeadMinutes} minutu.',
+      title: tr('alert_exam_reminder_title'),
+      message: tr(
+        'alert_exam_reminder_message',
+        args: [exam.title, exam.notificationLeadMinutes.toString()],
+      ),
+      titleKey: 'alert_exam_reminder_title',
+      messageKey: 'alert_exam_reminder_message',
+      messageArgs: [exam.title, exam.notificationLeadMinutes.toString()],
       scheduledAt: reminderAt.isBefore(DateTime.now())
           ? DateTime.now()
           : reminderAt,
     );
     addAlert(
       type: 'exam_started',
-      title: 'Ujian hahu ona',
-      message: '${exam.title} (${exam.subject}) hahu ona agora.',
+      title: tr('alert_exam_started_title'),
+      message: tr(
+        'alert_exam_started_message',
+        args: [exam.title, exam.subject],
+      ),
+      titleKey: 'alert_exam_started_title',
+      messageKey: 'alert_exam_started_message',
+      messageArgs: [exam.title, exam.subject],
       scheduledAt: exam.startTime.isBefore(DateTime.now())
           ? DateTime.now()
           : exam.startTime,
@@ -262,6 +295,12 @@ class ProfessorRepository {
         throw Exception('exam_schedule_conflict');
       }
     }
+  }
+
+  String _formatAlertDateTime(DateTime value) {
+    String two(int number) => number.toString().padLeft(2, '0');
+    return '${two(value.day)}/${two(value.month)}/${value.year} '
+        '${two(value.hour)}:${two(value.minute)}';
   }
 
   Future<DocumentReference> addQuestion(

@@ -66,6 +66,8 @@ class _AlertCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final accent = _accentColor(alert.type);
+    final title = _title();
+    final message = _message();
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.all(16),
@@ -102,7 +104,7 @@ class _AlertCard extends StatelessWidget {
                   children: [
                     Expanded(
                       child: Text(
-                        alert.title,
+                        title,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -118,7 +120,7 @@ class _AlertCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  alert.message,
+                  message,
                   style: TextStyle(
                     color: AppTheme.primaryText(context),
                     height: 1.35,
@@ -170,6 +172,30 @@ class _AlertCard extends StatelessWidget {
       'exam_reminder' => Icons.alarm_outlined,
       _ => Icons.notifications_active_outlined,
     };
+  }
+
+  String _title() {
+    if (alert.titleKey.isNotEmpty) return tr(alert.titleKey);
+    if (alert.type == 'exam_sent_for_publish') {
+      return tr('alert_exam_sent_publish_title');
+    }
+    if (alert.type == 'exam_published') return tr('alert_exam_published_title');
+    if (alert.type == 'exam_reminder') return tr('alert_exam_reminder_title');
+    if (alert.type == 'exam_started') return tr('alert_exam_started_title');
+    return alert.title;
+  }
+
+  String _message() {
+    if (alert.messageKey.isNotEmpty) {
+      return tr(alert.messageKey, args: alert.messageArgs);
+    }
+    if (alert.type == 'exam_sent_for_publish') {
+      return tr(
+        'alert_exam_sent_publish_message',
+        args: [alert.examTitle, alert.subject],
+      );
+    }
+    return alert.message;
   }
 }
 

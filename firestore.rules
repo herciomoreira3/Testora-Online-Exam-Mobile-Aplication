@@ -24,6 +24,27 @@ service cloud.firestore {
       return role() == 'student';
     }
 
+    function isValidUserRole(value) {
+      return value in ['', 'student', 'teacher', 'admin'];
+    }
+
+    function isClientAssignableUserRole(value) {
+      return value in ['', 'student', 'teacher'];
+    }
+
+    function selfKeepsProtectedUserFields() {
+      return request.resource.data.role == resource.data.role &&
+        request.resource.data.isActive == resource.data.isActive;
+    }
+
+    function adminKeepsAdminRoleLocked() {
+      return resource.data.role == 'admin'
+        ? request.resource.data.role == 'admin' &&
+          request.resource.data.isActive == resource.data.isActive
+        : request.resource.data.role != 'admin' &&
+          (request.resource.data.role != '' || resource.data.role == '');
+    }
+
     function isExamOwner(examId) {
       return signedIn() &&
         exists(/databases/$(database)/documents/exams/$(examId)) &&
@@ -37,12 +58,18 @@ service cloud.firestore {
       allow list: if signedIn();
       allow create: if signedIn() &&
         (request.auth.uid == uid || isAdmin()) &&
-        request.resource.data.role in ['', 'student', 'teacher', 'admin'];
+        isClientAssignableUserRole(request.resource.data.role);
       allow update: if signedIn() && (
-        request.auth.uid == uid ||
-        isAdmin()
+        (request.auth.uid == uid && selfKeepsProtectedUserFields()) ||
+        (
+          isAdmin() &&
+          isValidUserRole(request.resource.data.role) &&
+          adminKeepsAdminRoleLocked()
+        )
       );
-      allow delete: if signedIn() && isAdmin();
+      allow delete: if signedIn() && isAdmin() &&
+        resource.data.role == '' &&
+        resource.data.isActive == false;
     }
 
     match /exams/{examId} {

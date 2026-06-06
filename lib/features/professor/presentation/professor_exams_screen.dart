@@ -186,6 +186,7 @@ class _ProfessorExamCard extends ConsumerWidget {
     final canDelete = !exam.published && !exam.isDone;
     final canSend = !exam.published && !exam.isDone && !exam.isSending;
     final canViewResults = exam.isDone;
+    final isDone = exam.isDone;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
@@ -251,38 +252,40 @@ class _ProfessorExamCard extends ConsumerWidget {
                   child: ElevatedButton.icon(
                     onPressed: canViewResults ? onResults : null,
                     icon: const Icon(Icons.bar_chart_outlined),
-                    label: Text(tr('results')),
+                    label: Text(tr('view_results')),
                   ),
                 ),
-                const SizedBox(width: 10),
-                IconButton.filledTonal(
-                  tooltip: tr('edit_questions'),
-                  onPressed: onQuestions,
-                  icon: const Icon(Icons.quiz_outlined),
-                ),
-                const SizedBox(width: 8),
-                IconButton.filledTonal(
-                  tooltip: tr('edit_exam'),
-                  onPressed: onEdit,
-                  icon: const Icon(Icons.settings_outlined),
-                ),
-                if (!exam.published && !exam.isDone) ...[
-                  const SizedBox(width: 8),
+                if (!isDone) ...[
+                  const SizedBox(width: 10),
                   IconButton.filledTonal(
-                    tooltip: canSend
-                        ? tr('send_to_admin')
-                        : tr('exam_waiting_publish'),
-                    onPressed: canSend ? onSend : null,
-                    icon: const Icon(Icons.send_outlined),
+                    tooltip: tr('edit_questions'),
+                    onPressed: onQuestions,
+                    icon: const Icon(Icons.quiz_outlined),
                   ),
                   const SizedBox(width: 8),
                   IconButton.filledTonal(
-                    tooltip: canDelete
-                        ? tr('delete_exam')
-                        : tr('exam_delete_locked'),
-                    onPressed: canDelete ? onDelete : null,
-                    icon: const Icon(Icons.delete_outline),
+                    tooltip: tr('edit_exam'),
+                    onPressed: onEdit,
+                    icon: const Icon(Icons.settings_outlined),
                   ),
+                  if (!exam.published) ...[
+                    const SizedBox(width: 8),
+                    IconButton.filledTonal(
+                      tooltip: canSend
+                          ? tr('send_to_admin')
+                          : tr('exam_waiting_publish'),
+                      onPressed: canSend ? onSend : null,
+                      icon: const Icon(Icons.send_outlined),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton.filledTonal(
+                      tooltip: canDelete
+                          ? tr('delete_exam')
+                          : tr('exam_delete_locked'),
+                      onPressed: canDelete ? onDelete : null,
+                      icon: const Icon(Icons.delete_outline),
+                    ),
+                  ],
                 ],
               ],
             ),

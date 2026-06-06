@@ -10,13 +10,16 @@ final authStateProvider = StreamProvider((ref) {
   return ref.watch(authRepositoryProvider).authStateChanges;
 });
 
-final userProfileProvider = StreamProvider<UserModel?>((ref) async* {
-  final authState = await ref.watch(authStateProvider.future);
-  if (authState == null) {
-    yield null;
-    return;
-  }
-  yield* ref.read(authRepositoryProvider).watchUserProfile(authState.uid);
+final userProfileProvider = StreamProvider<UserModel?>((ref) {
+  final authState = ref.watch(authStateProvider);
+  return authState.when(
+    data: (user) {
+      if (user == null) return Stream<UserModel?>.value(null);
+      return ref.read(authRepositoryProvider).watchUserProfile(user.uid);
+    },
+    loading: () => Stream<UserModel?>.value(null),
+    error: (_, __) => Stream<UserModel?>.value(null),
+  );
 });
 
 class AuthController extends Notifier<AsyncValue<void>> {

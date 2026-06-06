@@ -9,7 +9,7 @@ class OneSignalPushService {
 
   static const _appId = '51778ec8-c5ff-4661-85f9-cca8f1b5b105';
   static const _apiKey =
-      'os_v2_app_kf3y5sgf75dgdbpzzsupdnnravmmyujflbcedifb6jdybq7nobnaozs3mvpeoegfqdf7bydftzbhkvxsvltk2gljn2qyuasanyel7da';
+      'os_v2_app_kf3y5sgf75dgdbpzzsupdnnraw2c47pn33ae3znqfkad7eqdukr3xu4xgeasovloe6zy5z2gwrh33se7bm3e7wb3yome3ozh4vk57ni';
   static final _endpoint = Uri.parse('https://api.onesignal.com/notifications');
   static final _legacyEndpoint = Uri.parse(
     'https://onesignal.com/api/v1/notifications',
@@ -42,7 +42,7 @@ class OneSignalPushService {
       final sentDirect = await _post(
         endpoint: _endpoint,
         payload: directPayload,
-        authorization: 'Key $_apiKey',
+        authorization: 'key $_apiKey',
         label: 'subscription',
         allowThrow: false,
       );
@@ -59,7 +59,7 @@ class OneSignalPushService {
     final sentAlias = await _post(
       endpoint: _endpoint,
       payload: aliasPayload,
-      authorization: 'Key $_apiKey',
+      authorization: 'key $_apiKey',
       label: 'external_id',
       allowThrow: false,
     );
@@ -80,7 +80,7 @@ class OneSignalPushService {
     await _post(
       endpoint: _legacyEndpoint,
       payload: legacyPayload,
-      authorization: 'Basic $_apiKey',
+      authorization: 'key $_apiKey',
       label: 'legacy_external_id',
       allowThrow: true,
     );

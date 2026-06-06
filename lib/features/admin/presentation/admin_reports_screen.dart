@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
@@ -53,6 +54,7 @@ class _AdminReportsScreenState extends ConsumerState<AdminReportsScreen> {
     List<_ReportRow> rows,
     String subjectLabel,
     String examLabel,
+    String studentLabel,
   ) async {
     if (rows.isEmpty) {
       ScaffoldMessenger.of(
@@ -64,18 +66,38 @@ class _AdminReportsScreenState extends ConsumerState<AdminReportsScreen> {
     setState(() => _isExporting = true);
     final doc = pw.Document();
     try {
+      final generatedAt = DateFormat('dd/MM/yyyy HH:mm').format(
+        DateTime.now(),
+      );
       doc.addPage(
         pw.MultiPage(
+          margin: const pw.EdgeInsets.fromLTRB(32, 28, 32, 32),
           build: (context) => [
-            pw.Text(
-              'Testora - ${tr('reports')}',
-              style: pw.TextStyle(fontSize: 22),
+            _pdfReportHeader(generatedAt: generatedAt),
+            pw.SizedBox(height: 14),
+            _pdfFilterSummary(
+              subjectLabel: subjectLabel,
+              examLabel: examLabel,
+              studentLabel: studentLabel,
+              totalRows: rows.length,
             ),
-            pw.SizedBox(height: 8),
-            pw.Text('${tr('subject')}: $subjectLabel'),
-            pw.Text('${tr('manage_exams')}: $examLabel'),
-            pw.SizedBox(height: 16),
+            pw.SizedBox(height: 18),
             pw.TableHelper.fromTextArray(
+              headerStyle: pw.TextStyle(
+                color: PdfColors.white,
+                fontWeight: pw.FontWeight.bold,
+              ),
+              headerDecoration: pw.BoxDecoration(
+                color: PdfColor.fromInt(0xFF00288E),
+              ),
+              cellStyle: const pw.TextStyle(fontSize: 9),
+              cellPadding: const pw.EdgeInsets.symmetric(
+                horizontal: 6,
+                vertical: 5,
+              ),
+              oddRowDecoration: pw.BoxDecoration(
+                color: PdfColor.fromInt(0xFFF8FAFC),
+              ),
               headers: [
                 tr('student_name'),
                 tr('email'),
@@ -274,7 +296,12 @@ class _AdminReportsScreenState extends ConsumerState<AdminReportsScreen> {
           ElevatedButton.icon(
             onPressed: _isExporting
                 ? null
-                : () => _exportPdf(rows, subjectLabel, examLabel),
+                : () => _exportPdf(
+                    rows,
+                    subjectLabel,
+                    examLabel,
+                    studentLabel,
+                  ),
             icon: _isExporting
                 ? const SizedBox(
                     width: 18,
@@ -349,6 +376,142 @@ class _ReportTable extends StatelessWidget {
       ),
     );
   }
+}
+
+pw.Widget _pdfReportHeader({required String generatedAt}) {
+  return pw.Column(
+    crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+    children: [
+      pw.Row(
+        crossAxisAlignment: pw.CrossAxisAlignment.center,
+        children: [
+          pw.Container(
+            width: 54,
+            height: 54,
+            decoration: pw.BoxDecoration(
+              color: PdfColor.fromInt(0xFF00288E),
+              shape: pw.BoxShape.circle,
+            ),
+            child: pw.Center(
+              child: pw.Text(
+                'T',
+                style: pw.TextStyle(
+                  color: PdfColors.white,
+                  fontSize: 28,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+          pw.SizedBox(width: 14),
+          pw.Expanded(
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text(
+                  'TESTORA',
+                  style: pw.TextStyle(
+                    fontSize: 24,
+                    fontWeight: pw.FontWeight.bold,
+                    color: PdfColor.fromInt(0xFF00288E),
+                  ),
+                ),
+                pw.Text(
+                  'Academic Examination Report',
+                  style: pw.TextStyle(
+                    fontSize: 12,
+                    color: PdfColor.fromInt(0xFF475569),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.end,
+            children: [
+              pw.Text(
+                tr('reports'),
+                style: pw.TextStyle(
+                  fontSize: 14,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+              pw.Text(
+                generatedAt,
+                style: pw.TextStyle(
+                  fontSize: 9,
+                  color: PdfColor.fromInt(0xFF64748B),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+      pw.SizedBox(height: 14),
+      pw.Container(height: 2, color: PdfColor.fromInt(0xFF00288E)),
+    ],
+  );
+}
+
+pw.Widget _pdfFilterSummary({
+  required String subjectLabel,
+  required String examLabel,
+  required String studentLabel,
+  required int totalRows,
+}) {
+  pw.Widget item(String label, String value) {
+    return pw.Container(
+      padding: const pw.EdgeInsets.all(8),
+      decoration: pw.BoxDecoration(
+        color: PdfColor.fromInt(0xFFF8FAFC),
+        border: pw.Border.all(color: PdfColor.fromInt(0xFFE2E8F0)),
+      ),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Text(
+            label,
+            style: pw.TextStyle(
+              fontSize: 8,
+              color: PdfColor.fromInt(0xFF64748B),
+              fontWeight: pw.FontWeight.bold,
+            ),
+          ),
+          pw.SizedBox(height: 3),
+          pw.Text(value, style: const pw.TextStyle(fontSize: 10)),
+        ],
+      ),
+    );
+  }
+
+  return pw.Column(
+    crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+    children: [
+      pw.Text(
+        tr('reports_hint'),
+        style: pw.TextStyle(
+          fontSize: 10,
+          color: PdfColor.fromInt(0xFF475569),
+        ),
+      ),
+      pw.SizedBox(height: 10),
+      pw.Row(
+        children: [
+          pw.Expanded(child: item(tr('subject'), subjectLabel)),
+          pw.SizedBox(width: 8),
+          pw.Expanded(child: item(tr('manage_exams'), examLabel)),
+        ],
+      ),
+      pw.SizedBox(height: 8),
+      pw.Row(
+        children: [
+          pw.Expanded(child: item(tr('student'), studentLabel)),
+          pw.SizedBox(width: 8),
+          pw.Expanded(child: item(tr('total_students'), totalRows.toString())),
+        ],
+      ),
+    ],
+  );
 }
 
 class _StudentFilterButton extends StatelessWidget {

@@ -32,7 +32,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final user = await ref.read(userProfileProvider.future);
     if (!mounted) return;
     final role = user?.role ?? '';
-    if (role == 'admin') {
+    if (user?.isActive != true) {
+      await ref.read(authControllerProvider.notifier).logout();
+      if (!mounted) return;
+      context.go('/login');
+      _showError('account_not_approved');
+    } else if (role == 'admin') {
       context.go('/admin-dashboard');
     } else if (role == 'teacher') {
       context.go('/prof-dashboard');

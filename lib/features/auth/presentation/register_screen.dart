@@ -55,6 +55,14 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           behavior: SnackBarBehavior.floating,
         ),
       );
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(tr('registration_pending')),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      context.go('/login');
     }
   }
 

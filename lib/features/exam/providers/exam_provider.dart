@@ -19,12 +19,17 @@ final activeExamsProvider = StreamProvider<List<ExamModel>>((ref) {
   return ref.watch(examRepositoryProvider).getActiveExams();
 });
 
+final publishedExamsProvider = StreamProvider<List<ExamModel>>((ref) {
+  return ref.watch(examRepositoryProvider).getPublishedExams();
+});
+
 class ExamSessionState {
   final ExamModel exam;
   final List<QuestionModel> questions;
   final int currentIndex;
   final Map<String, int> answers; // questionId -> selectedOptionIndex
   final bool isSubmitting;
+  final int timerStartSeconds;
 
   ExamSessionState({
     required this.exam,
@@ -32,6 +37,7 @@ class ExamSessionState {
     this.currentIndex = 0,
     this.answers = const {},
     this.isSubmitting = false,
+    this.timerStartSeconds = 0,
   });
 
   ExamSessionState copyWith({
@@ -40,6 +46,7 @@ class ExamSessionState {
     int? currentIndex,
     Map<String, int>? answers,
     bool? isSubmitting,
+    int? timerStartSeconds,
   }) {
     return ExamSessionState(
       exam: exam ?? this.exam,
@@ -47,6 +54,7 @@ class ExamSessionState {
       currentIndex: currentIndex ?? this.currentIndex,
       answers: answers ?? this.answers,
       isSubmitting: isSubmitting ?? this.isSubmitting,
+      timerStartSeconds: timerStartSeconds ?? this.timerStartSeconds,
     );
   }
 }
@@ -74,20 +82,31 @@ class ExamSessionNotifier extends Notifier<ExamSessionState?> {
         orderedQuestions.shuffle();
       }
 
+      final timerStartSeconds = _initialTimerSeconds(exam);
       state = ExamSessionState(
         exam: exam,
         questions: orderedQuestions,
         currentIndex: 0,
         answers: {},
         isSubmitting: false,
+        timerStartSeconds: timerStartSeconds,
       );
 
-      // Start the countdown timer
-      ref.read(examTimerProvider.notifier).start(exam.duration, onTimeUp);
+      ref
+          .read(examTimerProvider.notifier)
+          .startSeconds(timerStartSeconds, onTimeUp);
     } catch (e) {
       state = null;
       rethrow;
     }
+  }
+
+  int _initialTimerSeconds(ExamModel exam) {
+    final durationSeconds = exam.duration * 60;
+    final windowSeconds = exam.endTime.difference(DateTime.now()).inSeconds;
+    if (windowSeconds <= 0) return 0;
+    if (windowSeconds > durationSeconds) return durationSeconds;
+    return windowSeconds;
   }
 
   // Answer selection
@@ -137,9 +156,11 @@ class ExamSessionNotifier extends Notifier<ExamSessionState?> {
           ? (correctCount / currentSession.questions.length) * 100.0
           : 0.0;
 
-      final totalDurationSeconds = currentSession.exam.duration * 60;
       final remainingSeconds = ref.read(examTimerProvider);
-      final timeTaken = totalDurationSeconds - remainingSeconds;
+      final timeTaken =
+          (currentSession.timerStartSeconds - remainingSeconds)
+              .clamp(0, currentSession.timerStartSeconds)
+              .toInt();
 
       // Stop the timer
       ref.read(examTimerProvider.notifier).stop();

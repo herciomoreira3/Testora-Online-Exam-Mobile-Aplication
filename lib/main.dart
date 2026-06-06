@@ -11,7 +11,14 @@ import 'core/providers/app_preferences_provider.dart';
 import 'core/routes/app_router.dart';
 import 'core/themes/app_theme.dart';
 import 'features/alerts/providers/alert_provider.dart';
+import 'features/admin/presentation/admin_dashboard_screen.dart';
+import 'features/admin/presentation/admin_reports_screen.dart';
+import 'features/admin/providers/admin_provider.dart';
 import 'features/auth/providers/auth_provider.dart';
+import 'features/exam/presentation/list_exam_screen.dart';
+import 'features/exam/providers/exam_provider.dart';
+import 'features/history/presentation/history_screen.dart';
+import 'features/professor/providers/professor_exam_provider.dart';
 import 'shared/models/alert_model.dart';
 
 const _oneSignalAppId = '51778ec8-c5ff-4661-85f9-cca8f1b5b105';
@@ -65,14 +72,19 @@ class MyApp extends ConsumerWidget {
       }
     });
     ref.listen(authStateProvider, (previous, next) {
+      final previousUid = previous?.value?.uid;
       final user = next.value;
       if (user == null) {
+        _resetSessionScopedProviders(ref);
         _activeOneSignalUid = null;
         _oneSignalSyncedUsers.clear();
         _unreadPushSyncedUsers.clear();
         _pushedAlertIds.clear();
         unawaited(OneSignal.logout());
         return;
+      }
+      if (previousUid != null && previousUid != user.uid) {
+        _resetSessionScopedProviders(ref);
       }
       unawaited(_syncOneSignalSession(ref, user.uid));
     });
@@ -128,6 +140,24 @@ class MyApp extends ConsumerWidget {
       debugShowCheckedModeBanner: false,
     );
   }
+}
+
+void _resetSessionScopedProviders(WidgetRef ref) {
+  ref.read(darkModeOverrideProvider.notifier).clear();
+  ref.read(selectedSubjectOverrideProvider.notifier).clear();
+  ref.invalidate(userProfileProvider);
+  ref.invalidate(allUsersProvider);
+  ref.invalidate(subjectsProvider);
+  ref.invalidate(teacherSubjectsProvider);
+  ref.invalidate(studentSubjectsProvider);
+  ref.invalidate(allExamsProvider);
+  ref.invalidate(activeExamsProvider);
+  ref.invalidate(publishedExamsProvider);
+  ref.invalidate(studentDashboardResultsProvider);
+  ref.invalidate(studentResultsProvider);
+  ref.invalidate(adminResultsProvider);
+  ref.invalidate(adminAllResultsProvider);
+  ref.invalidate(myAlertsProvider);
 }
 
 Future<void> _syncOneSignalSession(WidgetRef ref, String uid) async {

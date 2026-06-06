@@ -6,7 +6,7 @@ import '../../../core/themes/app_theme.dart';
 import '../../../shared/models/user_model.dart';
 import '../providers/admin_provider.dart';
 
-enum _UserRoleFilter { all, admin, teacher, student, pending }
+enum _UserRoleFilter { all, teacher, student, pending, rejected }
 
 class ManageUsersScreen extends ConsumerStatefulWidget {
   const ManageUsersScreen({super.key});
@@ -16,7 +16,7 @@ class ManageUsersScreen extends ConsumerStatefulWidget {
 }
 
 class _ManageUsersScreenState extends ConsumerState<ManageUsersScreen> {
-  static const List<String> _roles = ['student', 'teacher', 'admin'];
+  static const List<String> _roles = ['student', 'teacher'];
   final _searchController = TextEditingController();
   _UserRoleFilter _filter = _UserRoleFilter.all;
   String _query = '';
@@ -40,16 +40,21 @@ class _ManageUsersScreenState extends ConsumerState<ManageUsersScreen> {
     }
   }
 
+  String _statusLabel(UserModel user) {
+    if (!user.isActive && user.role.isEmpty) return tr('rejected_user');
+    return _roleLabel(user.role);
+  }
+
   String _filterLabel(_UserRoleFilter filter) {
     switch (filter) {
-      case _UserRoleFilter.admin:
-        return tr('admin');
       case _UserRoleFilter.teacher:
         return tr('teacher');
       case _UserRoleFilter.student:
         return tr('student');
       case _UserRoleFilter.pending:
         return tr('new_user');
+      case _UserRoleFilter.rejected:
+        return tr('rejected_user');
       case _UserRoleFilter.all:
         return tr('all');
     }
@@ -57,14 +62,14 @@ class _ManageUsersScreenState extends ConsumerState<ManageUsersScreen> {
 
   IconData _filterIcon(_UserRoleFilter filter) {
     switch (filter) {
-      case _UserRoleFilter.admin:
-        return Icons.admin_panel_settings_outlined;
       case _UserRoleFilter.teacher:
         return Icons.school_outlined;
       case _UserRoleFilter.student:
         return Icons.person_outline_rounded;
       case _UserRoleFilter.pending:
         return Icons.person_add_alt_1_outlined;
+      case _UserRoleFilter.rejected:
+        return Icons.block_outlined;
       case _UserRoleFilter.all:
         return Icons.people_alt_outlined;
     }
@@ -81,14 +86,14 @@ class _ManageUsersScreenState extends ConsumerState<ManageUsersScreen> {
       if (!matchesSearch) return false;
 
       switch (_filter) {
-        case _UserRoleFilter.admin:
-          return user.role == 'admin';
         case _UserRoleFilter.teacher:
-          return user.role == 'teacher';
+          return user.role == 'teacher' && user.isActive;
         case _UserRoleFilter.student:
-          return user.role == 'student';
+          return user.role == 'student' && user.isActive;
         case _UserRoleFilter.pending:
-          return user.role.isEmpty;
+          return user.role.isEmpty && user.isActive;
+        case _UserRoleFilter.rejected:
+          return user.role.isEmpty && !user.isActive;
         case _UserRoleFilter.all:
           return true;
       }
@@ -98,14 +103,14 @@ class _ManageUsersScreenState extends ConsumerState<ManageUsersScreen> {
   int _countFor(List<UserModel> users, _UserRoleFilter filter) {
     return users.where((user) {
       switch (filter) {
-        case _UserRoleFilter.admin:
-          return user.role == 'admin';
         case _UserRoleFilter.teacher:
-          return user.role == 'teacher';
+          return user.role == 'teacher' && user.isActive;
         case _UserRoleFilter.student:
-          return user.role == 'student';
+          return user.role == 'student' && user.isActive;
         case _UserRoleFilter.pending:
-          return user.role.isEmpty;
+          return user.role.isEmpty && user.isActive;
+        case _UserRoleFilter.rejected:
+          return user.role.isEmpty && !user.isActive;
         case _UserRoleFilter.all:
           return true;
       }
@@ -135,7 +140,7 @@ class _ManageUsersScreenState extends ConsumerState<ManageUsersScreen> {
     if (confirmed != true) return;
 
     try {
-      await ref.read(adminRepositoryProvider).updateUserRole(user.uid, newRole);
+      await ref.read(adminRepositoryProvider).updateUserRole(user, newRole);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -147,7 +152,104 @@ class _ManageUsersScreenState extends ConsumerState<ManageUsersScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erro: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text(tr(e.toString())),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _rejectUser(UserModel user) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(tr('reject_user')),
+        content: Text('${tr('reject_user_confirm')}\n\n${user.name}'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(tr('cancel')),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Colors.white,
+            ),
+            child: Text(tr('reject')),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      await ref.read(adminRepositoryProvider).rejectUser(user);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(tr('user_rejected')),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(tr(e.toString())),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _deleteRejectedUser(UserModel user) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(tr('delete')),
+        content: Text('${tr('delete_rejected_user_confirm')}\n\n${user.name}'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(tr('cancel')),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Colors.white,
+            ),
+            child: Text(tr('delete')),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      await ref.read(adminRepositoryProvider).deleteRejectedUser(user);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(tr('user_deleted')),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(tr(e.toString())),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -156,6 +258,7 @@ class _ManageUsersScreenState extends ConsumerState<ManageUsersScreen> {
   @override
   Widget build(BuildContext context) {
     final usersAsync = ref.watch(allUsersProvider);
+    final subjects = ref.watch(subjectsProvider).value ?? const [];
     final theme = Theme.of(context);
 
     return Scaffold(
@@ -203,21 +306,31 @@ class _ManageUsersScreenState extends ConsumerState<ManageUsersScreen> {
                 _EmptyFilteredUsers(label: _filterLabel(_filter))
               else
                 ...filteredUsers.map(
-                  (user) => _UserCard(
-                    user: user,
-                    roleLabel: _roleLabel(user.role),
-                    roleItems: _roles
-                        .map(
-                          (role) => DropdownMenuItem<String>(
-                            value: role,
-                            child: Text(_roleLabel(role)),
-                          ),
-                        )
-                        .toList(),
-                    onRoleChanged: (newRole) {
-                      if (newRole != null) _changeRole(user, newRole);
-                    },
-                  ),
+                  (user) {
+                    final isAssignedToSubject = subjects.any(
+                      (subject) =>
+                          subject.teacherIds.contains(user.uid) ||
+                          subject.studentIds.contains(user.uid),
+                    );
+                    return _UserCard(
+                      user: user,
+                      roleLabel: _statusLabel(user),
+                      roleItems: _roles
+                          .map(
+                            (role) => DropdownMenuItem<String>(
+                              value: role,
+                              child: Text(_roleLabel(role)),
+                            ),
+                          )
+                          .toList(),
+                      isAssignedToSubject: isAssignedToSubject,
+                      onRoleChanged: (newRole) {
+                        if (newRole != null) _changeRole(user, newRole);
+                      },
+                      onReject: () => _rejectUser(user),
+                      onDeleteRejected: () => _deleteRejectedUser(user),
+                    );
+                  },
                 ),
             ],
           );
@@ -313,18 +426,33 @@ class _UserCard extends StatelessWidget {
     required this.user,
     required this.roleLabel,
     required this.roleItems,
+    required this.isAssignedToSubject,
     required this.onRoleChanged,
+    required this.onReject,
+    required this.onDeleteRejected,
   });
 
   final UserModel user;
   final String roleLabel;
   final List<DropdownMenuItem<String>> roleItems;
+  final bool isAssignedToSubject;
   final ValueChanged<String?> onRoleChanged;
+  final VoidCallback onReject;
+  final VoidCallback onDeleteRejected;
 
   @override
   Widget build(BuildContext context) {
     final roleValue = user.role.isEmpty ? null : user.role;
-    final isPending = user.role.isEmpty;
+    final isRejected = user.role.isEmpty && !user.isActive;
+    final isPending = user.role.isEmpty && user.isActive;
+    final isLocked = user.isAdmin || isRejected || isAssignedToSubject;
+    final accentColor = isRejected
+        ? Theme.of(context).colorScheme.error
+        : isPending
+        ? const Color(0xFFEA580C)
+        : user.isAdmin
+        ? const Color(0xFF475569)
+        : AppTheme.mutedText(context);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -333,8 +461,8 @@ class _UserCard extends StatelessWidget {
         color: AppTheme.cardBackground(context),
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
-          color: isPending
-              ? const Color(0xFFF59E0B)
+          color: (isPending || isRejected)
+              ? accentColor
               : AppTheme.borderColor(context),
         ),
         boxShadow: const [
@@ -348,15 +476,17 @@ class _UserCard extends StatelessWidget {
       child: Row(
         children: [
           CircleAvatar(
-            backgroundColor: isPending
-                ? const Color(0xFFFFF7ED)
+            backgroundColor: isPending || isRejected
+                ? accentColor.withValues(alpha: 0.1)
                 : const Color(0xFFEFF6FF),
-            foregroundColor: isPending
-                ? const Color(0xFFEA580C)
+            foregroundColor: isPending || isRejected
+                ? accentColor
                 : const Color(0xFF00288E),
-            child: Text(
-              user.name.isNotEmpty ? user.name[0].toUpperCase() : 'U',
-            ),
+            child: user.isAdmin || isRejected
+                ? Icon(user.isAdmin ? Icons.lock_outline : Icons.block)
+                : Text(
+                    user.name.isNotEmpty ? user.name[0].toUpperCase() : 'U',
+                  ),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -380,23 +510,56 @@ class _UserCard extends StatelessWidget {
                 Text(
                   roleLabel,
                   style: TextStyle(
-                    color: isPending
-                        ? const Color(0xFFEA580C)
-                        : AppTheme.mutedText(context),
+                    color: accentColor,
                     fontWeight: FontWeight.w700,
                     fontSize: 12,
                   ),
                 ),
+                if (isAssignedToSubject && !user.isAdmin) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    tr('role_subject_locked'),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: AppTheme.mutedText(context),
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
           const SizedBox(width: 10),
-          DropdownButton<String>(
-            value: roleValue,
-            hint: Text(tr('set_role')),
-            items: roleItems,
-            onChanged: onRoleChanged,
-          ),
+          if (isPending)
+            TextButton.icon(
+              onPressed: onReject,
+              icon: const Icon(Icons.block_outlined),
+              label: Text(tr('reject')),
+              style: TextButton.styleFrom(foregroundColor: accentColor),
+            )
+          else if (isRejected)
+            IconButton(
+              tooltip: tr('delete'),
+              onPressed: onDeleteRejected,
+              icon: const Icon(Icons.delete_outline),
+              color: Theme.of(context).colorScheme.error,
+            ),
+          if (!isRejected) ...[
+            const SizedBox(width: 8),
+            if (isLocked)
+              Icon(
+                Icons.lock_outline,
+                color: AppTheme.mutedText(context),
+              )
+            else
+              DropdownButton<String>(
+                value: roleValue,
+                hint: Text(tr('set_role')),
+                items: roleItems,
+                onChanged: onRoleChanged,
+              ),
+          ],
         ],
       ),
     );

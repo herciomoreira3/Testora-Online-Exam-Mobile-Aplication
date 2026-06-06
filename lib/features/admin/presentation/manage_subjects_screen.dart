@@ -652,8 +652,16 @@ class _StudentAssignmentSheetState
     extends ConsumerState<_StudentAssignmentSheet> {
   final _searchController = TextEditingController();
   final Set<String> _selectedStudentIds = {};
+  late Set<String> _assignedStudentIds;
   String _query = '';
   bool _isSaving = false;
+  String? _removingStudentId;
+
+  @override
+  void initState() {
+    super.initState();
+    _assignedStudentIds = widget.subject.studentIds.toSet();
+  }
 
   @override
   void dispose() {
@@ -666,7 +674,7 @@ class _StudentAssignmentSheetState
     setState(() => _isSaving = true);
     try {
       final updated = {
-        ...widget.subject.studentIds,
+        ..._assignedStudentIds,
         ..._selectedStudentIds,
       }.toList();
       await ref
@@ -678,11 +686,36 @@ class _StudentAssignmentSheetState
     }
   }
 
+  Future<void> _removeStudent(UserModel student) async {
+    setState(() => _removingStudentId = student.uid);
+    try {
+      final updated = _assignedStudentIds
+          .where((studentId) => studentId != student.uid)
+          .toList();
+      await ref.read(adminRepositoryProvider).removeStudentFromSubject(
+        subjectId: widget.subject.id,
+        studentId: student.uid,
+        remainingStudentIds: updated,
+      );
+      if (mounted) {
+        setState(() {
+          _assignedStudentIds = updated.toSet();
+          _selectedStudentIds.remove(student.uid);
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _removingStudentId = null);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final users = ref.watch(allUsersProvider).value ?? const <UserModel>[];
+    final assignedStudents = users
+        .where((user) => _assignedStudentIds.contains(user.uid))
+        .toList();
     final students = users.where((user) {
-      final notAssigned = !widget.subject.studentIds.contains(user.uid);
+      final notAssigned = !_assignedStudentIds.contains(user.uid);
       final needle = _query.trim().toLowerCase();
       final matchesSearch =
           needle.isEmpty ||
@@ -692,78 +725,129 @@ class _StudentAssignmentSheetState
     }).toList();
 
     return _SheetFrame(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            tr('assign_students'),
-            style: Theme.of(
-              context,
-            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            widget.subject.name,
-            style: TextStyle(color: AppTheme.mutedText(context)),
-          ),
-          const SizedBox(height: 14),
-          _SearchField(
-            controller: _searchController,
-            hintText: tr('search_student'),
-            onChanged: (value) => setState(() => _query = value),
-          ),
-          const SizedBox(height: 12),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 360),
-            child: students.isEmpty
-                ? Center(child: Text(tr('no_available_students')))
-                : ListView.separated(
-                    shrinkWrap: true,
-                    itemCount: students.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
-                    itemBuilder: (context, index) {
-                      final student = students[index];
-                      final selected = _selectedStudentIds.contains(
-                        student.uid,
-                      );
-                      return CheckboxListTile(
-                        value: selected,
-                        contentPadding: EdgeInsets.zero,
-                        title: Text(student.name),
-                        subtitle: Text(student.email),
-                        secondary: CircleAvatar(
-                          child: Text(
-                            student.name.isNotEmpty
-                                ? student.name[0].toUpperCase()
-                                : 'S',
-                          ),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              tr('assign_students'),
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              widget.subject.name,
+              style: TextStyle(color: AppTheme.mutedText(context)),
+            ),
+            if (assignedStudents.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              Text(
+                tr('assigned_students'),
+                style: const TextStyle(fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 8),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 220),
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: assignedStudents.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (context, index) {
+                    final student = assignedStudents[index];
+                    final isRemoving = _removingStudentId == student.uid;
+                    return ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: CircleAvatar(
+                        child: Text(
+                          student.name.isNotEmpty
+                              ? student.name[0].toUpperCase()
+                              : 'S',
                         ),
-                        onChanged: (value) {
-                          setState(() {
-                            if (value == true) {
-                              _selectedStudentIds.add(student.uid);
-                            } else {
-                              _selectedStudentIds.remove(student.uid);
-                            }
-                          });
-                        },
-                      );
-                    },
-                  ),
-          ),
-          const SizedBox(height: 16),
-          ElevatedButton.icon(
-            onPressed: _isSaving || _selectedStudentIds.isEmpty ? null : _save,
-            icon: _isSaving
-                ? const SizedBox.square(
-                    dimension: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.group_add_outlined),
-            label: Text(tr('save')),
-          ),
-        ],
+                      ),
+                      title: Text(student.name),
+                      subtitle: Text(student.email),
+                      trailing: IconButton(
+                        tooltip: tr('delete'),
+                        color: Colors.red,
+                        onPressed: isRemoving || _isSaving
+                            ? null
+                            : () => _removeStudent(student),
+                        icon: isRemoving
+                            ? const SizedBox.square(
+                                dimension: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.delete_outline),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+            const SizedBox(height: 14),
+            _SearchField(
+              controller: _searchController,
+              hintText: tr('search_student'),
+              onChanged: (value) => setState(() => _query = value),
+            ),
+            const SizedBox(height: 12),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 360),
+              child: students.isEmpty
+                  ? Center(child: Text(tr('no_available_students')))
+                  : ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: students.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final student = students[index];
+                        final selected = _selectedStudentIds.contains(
+                          student.uid,
+                        );
+                        return CheckboxListTile(
+                          value: selected,
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(student.name),
+                          subtitle: Text(student.email),
+                          secondary: CircleAvatar(
+                            child: Text(
+                              student.name.isNotEmpty
+                                  ? student.name[0].toUpperCase()
+                                  : 'S',
+                            ),
+                          ),
+                          onChanged: (value) {
+                            setState(() {
+                              if (value == true) {
+                                _selectedStudentIds.add(student.uid);
+                              } else {
+                                _selectedStudentIds.remove(student.uid);
+                              }
+                            });
+                          },
+                        );
+                      },
+                    ),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: _isSaving || _selectedStudentIds.isEmpty
+                  ? null
+                  : _save,
+              icon: _isSaving
+                  ? const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.group_add_outlined),
+              label: Text(tr('save')),
+            ),
+          ],
+        ),
       ),
     );
   }

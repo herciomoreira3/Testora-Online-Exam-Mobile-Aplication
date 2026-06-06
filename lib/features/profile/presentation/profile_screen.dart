@@ -386,16 +386,42 @@ class _ProfileAvatar extends StatelessWidget {
   }
 }
 
-class _SubjectPreferenceCard extends ConsumerWidget {
+class _SubjectPreferenceCard extends ConsumerStatefulWidget {
   const _SubjectPreferenceCard({required this.user});
 
   final UserModel user;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final subjectsAsync = user.isTeacher
-        ? ref.watch(teacherSubjectsProvider(user.uid))
-        : ref.watch(studentSubjectsProvider(user.uid));
+  ConsumerState<_SubjectPreferenceCard> createState() =>
+      _SubjectPreferenceCardState();
+}
+
+class _SubjectPreferenceCardState extends ConsumerState<_SubjectPreferenceCard> {
+  String? _scheduledSelectedId;
+
+  void _syncDefaultSubjectAfterBuild(String selectedId) {
+    if (_scheduledSelectedId == selectedId) return;
+    _scheduledSelectedId = selectedId;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted || _scheduledSelectedId != selectedId) return;
+
+      ref.read(selectedSubjectOverrideProvider.notifier).setValue(selectedId);
+      await ProfileScreen._updatePreference(ref, widget.user, {
+        'selectedSubjectId': selectedId,
+      }, refresh: false);
+
+      if (mounted && _scheduledSelectedId == selectedId) {
+        _scheduledSelectedId = null;
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final subjectsAsync = widget.user.isTeacher
+        ? ref.watch(teacherSubjectsProvider(widget.user.uid))
+        : ref.watch(studentSubjectsProvider(widget.user.uid));
 
     return subjectsAsync.when(
       data: (subjects) {
@@ -414,27 +440,21 @@ class _SubjectPreferenceCard extends ConsumerWidget {
         }
 
         final profileSelectedIsValid = subjects.any(
-          (subject) => subject.id == user.selectedSubjectId,
+          (subject) => subject.id == widget.user.selectedSubjectId,
         );
         final overrideSelectedId = ref.watch(selectedSubjectOverrideProvider);
-        final activeSelectedId = overrideSelectedId ?? user.selectedSubjectId;
+        final activeSelectedId =
+            overrideSelectedId ?? widget.user.selectedSubjectId;
         final activeSelectedIsValid = subjects.any(
           (subject) => subject.id == activeSelectedId,
         );
         final selectedId = activeSelectedIsValid
             ? activeSelectedId
             : profileSelectedIsValid
-            ? user.selectedSubjectId
+            ? widget.user.selectedSubjectId
             : subjects.first.id;
         if (!profileSelectedIsValid && overrideSelectedId != selectedId) {
-          ref
-              .read(selectedSubjectOverrideProvider.notifier)
-              .setValue(selectedId);
-          Future.microtask(
-            () => ProfileScreen._updatePreference(ref, user, {
-              'selectedSubjectId': selectedId,
-            }, refresh: false),
-          );
+          _syncDefaultSubjectAfterBuild(selectedId);
         }
 
         return _SettingsCard(
@@ -448,7 +468,7 @@ class _SubjectPreferenceCard extends ConsumerWidget {
                 ref
                     .read(selectedSubjectOverrideProvider.notifier)
                     .setValue(value);
-                ProfileScreen._updatePreference(ref, user, {
+                ProfileScreen._updatePreference(ref, widget.user, {
                   'selectedSubjectId': value,
                 }, refresh: false);
               },

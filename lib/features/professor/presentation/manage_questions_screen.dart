@@ -5,10 +5,12 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:easy_localization/easy_localization.dart';
+import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../shared/widgets/custom_textfield.dart';
 import '../../../shared/widgets/custom_button.dart';
+import '../../auth/providers/auth_provider.dart';
 
 import '../providers/professor_exam_provider.dart';
 import '../providers/question_provider.dart';
@@ -174,11 +176,24 @@ class _ManageQuestionsScreenState extends ConsumerState<ManageQuestionsScreen> {
         .deleteQuestion(widget.examId, qId);
   }
 
+  void _handleBack() {
+    if (Navigator.of(context).canPop()) {
+      context.pop();
+      return;
+    }
+    final role = ref.read(userProfileProvider).value?.role;
+    context.go(role == 'admin' ? '/admin/exams' : '/prof-dashboard/exams');
+  }
+
   @override
   Widget build(BuildContext context) {
     final questionsAsync = ref.watch(examQuestionsProvider(widget.examId));
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded),
+          onPressed: _handleBack,
+        ),
         title: Text(tr('manage_questions')),
         actions: [
           IconButton(

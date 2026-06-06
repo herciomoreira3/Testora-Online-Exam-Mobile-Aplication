@@ -24,18 +24,23 @@ class _TakeExamScreenState extends ConsumerState<TakeExamScreen>
     with WidgetsBindingObserver {
   bool _started = false;
   bool _isAutoSubmitting = false;
+  bool _isSubmittingExam = false;
   String? _blockMessageKey;
+  late final ScrollController _questionScrollController;
+  final Map<String, Uint8List> _decodedImageCache = {};
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _questionScrollController = ScrollController();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _questionScrollController.dispose();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
   }
@@ -87,6 +92,8 @@ class _TakeExamScreenState extends ConsumerState<TakeExamScreen>
   }
 
   Future<void> _submitAndNavigate() async {
+    if (_isSubmittingExam) return;
+    _isSubmittingExam = true;
     try {
       final result = await ref.read(examSessionProvider.notifier).submit();
       if (mounted) {
@@ -177,7 +184,7 @@ class _TakeExamScreenState extends ConsumerState<TakeExamScreen>
       builder: (context) => AlertDialog(
         title: const Text('Sai husi Teste?'),
         content: const Text(
-          'Ita boot sei lakon ita-boot nia resposta hotu se ita boot sai agora.',
+          'Resposta nebe ita boot hatan ona sei entrega agora, no teste sei remata.',
         ),
         actions: [
           TextButton(
@@ -189,10 +196,9 @@ class _TakeExamScreenState extends ConsumerState<TakeExamScreen>
               backgroundColor: Colors.red,
               foregroundColor: Colors.white,
             ),
-            onPressed: () {
-              ref.read(examTimerProvider.notifier).stop();
+            onPressed: () async {
               Navigator.pop(context); // Close dialog
-              context.go('/home');
+              await _submitAndNavigate();
             },
             child: const Text('Sai'),
           ),
@@ -201,23 +207,47 @@ class _TakeExamScreenState extends ConsumerState<TakeExamScreen>
     );
   }
 
-  String _formatTimer(int totalSeconds) {
-    final minutes = totalSeconds ~/ 60;
-    final seconds = totalSeconds % 60;
-    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+  void _goToPreviousQuestion() {
+    ref.read(examSessionProvider.notifier).previousQuestion();
+    _scrollQuestionToTop();
+  }
+
+  void _goToNextQuestion() {
+    ref.read(examSessionProvider.notifier).nextQuestion();
+    _scrollQuestionToTop();
+  }
+
+  void _scrollQuestionToTop() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_questionScrollController.hasClients) return;
+      _questionScrollController.jumpTo(0);
+    });
   }
 
   Widget _questionImage(dynamic question) {
     if (question.imageUrl != null && question.imageUrl!.isNotEmpty) {
       return Image.network(
+        key: ValueKey(question.imageUrl),
         question.imageUrl!,
         fit: BoxFit.cover,
+        frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+          if (wasSynchronouslyLoaded || frame != null) return child;
+          return const SizedBox(
+            height: 180,
+            child: Center(child: CircularProgressIndicator()),
+          );
+        },
         errorBuilder: (_, __, ___) => _imageError(),
       );
     }
     if (question.imageData != null && question.imageData!.isNotEmpty) {
+      final bytes = _decodedImageCache.putIfAbsent(
+        question.id,
+        () => base64Decode(question.imageData!),
+      );
       return Image.memory(
-        base64Decode(question.imageData!),
+        bytes,
+        key: ValueKey(question.id),
         fit: BoxFit.cover,
         errorBuilder: (_, __, ___) => _imageError(),
       );
@@ -242,7 +272,6 @@ class _TakeExamScreenState extends ConsumerState<TakeExamScreen>
       orElse: () => throw 'Exam not found',
     );
     final session = ref.watch(examSessionProvider);
-    final remainingTime = ref.watch(examTimerProvider);
     final theme = Theme.of(context);
 
     // Synchronously initialize the exam session once the exam data is ready
@@ -315,46 +344,7 @@ class _TakeExamScreenState extends ConsumerState<TakeExamScreen>
             onPressed: _showExitConfirmation,
           ),
           actions: [
-            // Gorgeous glowing timer badge
-            Container(
-              margin: const EdgeInsets.only(right: 16),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: remainingTime < 60
-                    ? Colors.red.withValues(alpha: 0.15)
-                    : theme.colorScheme.primary.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: remainingTime < 60
-                      ? Colors.red
-                      : theme.colorScheme.primary,
-                  width: 1.5,
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.alarm_on_rounded,
-                    size: 16,
-                    color: remainingTime < 60
-                        ? Colors.red
-                        : theme.colorScheme.primary,
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    _formatTimer(remainingTime),
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      color: remainingTime < 60
-                          ? Colors.red
-                          : theme.colorScheme.primary,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            const _ExamTimerBadge(),
           ],
         ),
         body: Stack(
@@ -414,6 +404,8 @@ class _TakeExamScreenState extends ConsumerState<TakeExamScreen>
                 // Interactive question workspace
                 Expanded(
                   child: SingleChildScrollView(
+                    key: ValueKey(currentQuestion.id),
+                    controller: _questionScrollController,
                     padding: const EdgeInsets.all(20.0),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -550,9 +542,7 @@ class _TakeExamScreenState extends ConsumerState<TakeExamScreen>
                       // Previous button
                       TextButton.icon(
                         onPressed: session.currentIndex > 0
-                            ? () => ref
-                                  .read(examSessionProvider.notifier)
-                                  .previousQuestion()
+                            ? _goToPreviousQuestion
                             : null,
                         icon: const Icon(
                           Icons.arrow_back_ios_new_rounded,
@@ -598,9 +588,7 @@ class _TakeExamScreenState extends ConsumerState<TakeExamScreen>
                             size: 16,
                           ),
                           label: const Text('Oin-husi'),
-                          onPressed: () => ref
-                              .read(examSessionProvider.notifier)
-                              .nextQuestion(),
+                          onPressed: _goToNextQuestion,
                         ),
                     ],
                   ),
@@ -634,6 +622,49 @@ class _TakeExamScreenState extends ConsumerState<TakeExamScreen>
               ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _ExamTimerBadge extends ConsumerWidget {
+  const _ExamTimerBadge();
+
+  String _formatTimer(int totalSeconds) {
+    final minutes = totalSeconds ~/ 60;
+    final seconds = totalSeconds % 60;
+    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final remainingTime = ref.watch(examTimerProvider);
+    final theme = Theme.of(context);
+    final isUrgent = remainingTime < 60;
+    final color = isUrgent ? Colors.red : theme.colorScheme.primary;
+
+    return Container(
+      margin: const EdgeInsets.only(right: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: isUrgent ? 0.15 : 0.1),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color, width: 1.5),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.alarm_on_rounded, size: 16, color: color),
+          const SizedBox(width: 6),
+          Text(
+            _formatTimer(remainingTime),
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+        ],
       ),
     );
   }

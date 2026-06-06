@@ -8,7 +8,6 @@ import '../../../shared/models/exam_model.dart';
 import '../../../shared/models/result_model.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../exam/providers/exam_provider.dart';
-import '../../professor/providers/professor_exam_provider.dart';
 
 final studentResultsProvider = StreamProvider<List<ResultModel>>((ref) {
   final authStateAsync = ref.watch(authStateProvider);
@@ -38,7 +37,8 @@ class HistoryScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final resultsAsync = ref.watch(studentResultsProvider);
     final user = ref.watch(userProfileProvider).value;
-    final allExams = ref.watch(allExamsProvider).value ?? const <ExamModel>[];
+    final publishedExams =
+        ref.watch(publishedExamsProvider).value ?? const <ExamModel>[];
     final theme = Theme.of(context);
 
     return Scaffold(
@@ -50,7 +50,7 @@ class HistoryScreen extends ConsumerWidget {
               user?.selectedSubjectId ??
               '';
           final resultSubjectIds = {
-            for (final exam in allExams) exam.id: exam.subjectId,
+            for (final exam in publishedExams) exam.id: exam.subjectId,
           };
           final scopedResults = results.where((result) {
             if (selectedSubjectId.isEmpty) return true;
@@ -76,6 +76,7 @@ class HistoryScreen extends ConsumerWidget {
           return RefreshIndicator(
             onRefresh: () async {
               ref.invalidate(studentResultsProvider);
+              ref.invalidate(publishedExamsProvider);
             },
             child: ListView(
               padding: const EdgeInsets.fromLTRB(20, 18, 20, 28),

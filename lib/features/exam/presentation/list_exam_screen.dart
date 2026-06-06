@@ -9,7 +9,6 @@ import '../../../core/providers/app_preferences_provider.dart';
 import '../../../core/themes/app_theme.dart';
 import '../../admin/providers/admin_provider.dart';
 import '../../auth/providers/auth_provider.dart';
-import '../../professor/providers/professor_exam_provider.dart';
 import '../providers/exam_provider.dart';
 
 final studentDashboardResultsProvider = StreamProvider<List<ResultModel>>((
@@ -44,7 +43,8 @@ class ListExamScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final examsAsync = ref.watch(activeExamsProvider);
-    final allExams = ref.watch(allExamsProvider).value ?? const <ExamModel>[];
+    final publishedExams =
+        ref.watch(publishedExamsProvider).value ?? const <ExamModel>[];
     final userAsync = ref.watch(userProfileProvider);
     final resultsAsync = ref.watch(studentDashboardResultsProvider);
     final clockNow = ref.watch(examClockProvider).value ?? DateTime.now();
@@ -64,7 +64,7 @@ class ListExamScreen extends ConsumerWidget {
               user?.selectedSubjectId ??
               '';
           final resultSubjectIds = {
-            for (final exam in allExams) exam.id: exam.subjectId,
+            for (final exam in publishedExams) exam.id: exam.subjectId,
           };
           final results = (resultsAsync.value ?? const <ResultModel>[]).where((
             result,
@@ -119,6 +119,7 @@ class ListExamScreen extends ConsumerWidget {
           return RefreshIndicator(
             onRefresh: () async {
               ref.invalidate(activeExamsProvider);
+              ref.invalidate(publishedExamsProvider);
               ref.invalidate(studentDashboardResultsProvider);
             },
             child: ListView(

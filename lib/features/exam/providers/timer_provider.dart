@@ -14,8 +14,16 @@ class ExamTimerNotifier extends Notifier<int> {
   }
 
   void start(int minutes, VoidCallback onTimeUp) {
+    startSeconds(minutes * 60, onTimeUp);
+  }
+
+  void startSeconds(int totalSeconds, VoidCallback onTimeUp) {
     _timer?.cancel();
-    state = minutes * 60;
+    state = totalSeconds < 0 ? 0 : totalSeconds;
+    if (state == 0) {
+      Future<void>.microtask(() => onTimeUp());
+      return;
+    }
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (state > 0) {
         state--;

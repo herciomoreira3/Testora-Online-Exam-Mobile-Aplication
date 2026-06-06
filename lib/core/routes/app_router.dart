@@ -70,7 +70,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 
       if (isLoggingIn || isRegistering) {
         if (userProfileAsync.isLoading) return null;
-        final role = userProfileAsync.value?.role ?? '';
+        final profile = userProfileAsync.value;
+        final role = profile?.role ?? '';
+        if (profile != null && !profile.isActive) return null;
         if (role == 'admin') return '/admin-dashboard';
         if (role == 'teacher') return '/prof-dashboard';
         if (role == 'student') return '/home';
@@ -78,7 +80,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       }
 
       if (userProfileAsync.isLoading) return null;
-      final role = userProfileAsync.value?.role ?? '';
+      final profile = userProfileAsync.value;
+      if (profile != null && !profile.isActive) {
+        return '/login';
+      }
+      final role = profile?.role ?? '';
       if (role.isEmpty) {
         return '/login';
       }

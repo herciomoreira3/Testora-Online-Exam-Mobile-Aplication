@@ -18,14 +18,34 @@ class AuthRepository {
   // Login
   Future<UserCredential> signInWithEmail(String email, String password) async {
     try {
-      return await _auth.signInWithEmailAndPassword(
+      final credential = await _auth.signInWithEmailAndPassword(
         email: email.trim(),
         password: password,
       );
+      await _ensureActiveEmailProfile(credential.user);
+      return credential;
     } on FirebaseAuthException catch (e) {
       throw _handleAuthException(e);
     } catch (e) {
+      if (e is String) rethrow;
       throw 'Akontese sala. Favor koko fali.';
+    }
+  }
+
+  Future<void> _ensureActiveEmailProfile(User? user) async {
+    if (user == null) throw 'auth_failed';
+
+    final doc = await _firestore.collection('users').doc(user.uid).get();
+    final data = doc.data();
+    if (!doc.exists || data == null) {
+      await signOut();
+      throw 'account_not_approved';
+    }
+
+    final profile = UserModel.fromMap(data, doc.id);
+    if (!profile.isActive || profile.role.isEmpty) {
+      await signOut();
+      throw 'account_not_approved';
     }
   }
 
@@ -81,6 +101,10 @@ class AuthRepository {
     final uidDoc = await _firestore.collection('users').doc(user.uid).get();
     if (uidDoc.exists && uidDoc.data() != null) {
       final profile = UserModel.fromMap(uidDoc.data()!, uidDoc.id);
+      if (!profile.isActive) {
+        await signOut();
+        throw 'account_not_approved';
+      }
       if (profile.isActive && profile.role.isNotEmpty) {
         await _refreshGoogleProfile(user, uidDoc.data()!, email);
         return;
@@ -265,15 +289,18 @@ class AuthRepository {
         name: name,
         email: email.trim(),
         school: school,
-        role: UserModel.normalizeRole(role),
+        role: '',
         createdAt: DateTime.now(),
       );
 
       await _firestore.collection('users').doc(uid).set({
         ...userModel.toMap(),
         'emailLower': email.trim().toLowerCase(),
+        'requestedRole': UserModel.normalizeRole(role),
+        'updatedAt': FieldValue.serverTimestamp(),
       });
 
+      await signOut();
       return credential;
     } on FirebaseAuthException catch (e) {
       throw _handleAuthException(e);

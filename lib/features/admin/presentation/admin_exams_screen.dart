@@ -24,7 +24,11 @@ class _AdminExamsScreenState extends ConsumerState<AdminExamsScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: Text(tr('delete_exam')),
-        content: Text(tr('delete_exam_confirm')),
+        content: Text(
+          exam.isDone
+              ? '${tr('delete_exam')} ${exam.title}?'
+              : tr('delete_exam_confirm'),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -185,9 +189,16 @@ class _AdminExamsScreenState extends ConsumerState<AdminExamsScreen> {
                           ),
                         ),
                         child: TabBar(
-                          labelColor: const Color(0xFF0F172A),
-                          unselectedLabelColor: const Color(0xFF64748B),
+                          labelColor: AppTheme.isDark(context)
+                              ? Colors.white
+                              : const Color(0xFF0F172A),
+                          unselectedLabelColor: AppTheme.isDark(context)
+                              ? Colors.white
+                              : const Color(0xFF64748B),
                           indicatorSize: TabBarIndicatorSize.tab,
+                          indicatorColor: AppTheme.isDark(context)
+                              ? Colors.white
+                              : theme.colorScheme.primary,
                           tabs: [
                             Tab(
                               text:
@@ -343,7 +354,6 @@ class _AdminExamCard extends StatelessWidget {
     return Consumer(
       builder: (context, ref, _) {
         final canPublish = sending && !published && totalQuestions > 0;
-        final canViewResults = done;
 
         return Container(
           margin: const EdgeInsets.only(bottom: 14),
@@ -402,42 +412,46 @@ class _AdminExamCard extends StatelessWidget {
                 const SizedBox(height: 14),
                 Row(
                   children: [
-                    if (canViewResults) ...[
+                    if (done) ...[
                       Expanded(
                         child: ElevatedButton.icon(
-                          onPressed: onResults,
-                          icon: const Icon(Icons.bar_chart_outlined),
-                          label: Text(tr('results')),
+                          onPressed: onDelete,
+                          icon: const Icon(Icons.delete_outline),
+                          label: Text(tr('delete')),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red,
+                            foregroundColor: Colors.white,
+                          ),
                         ),
                       ),
-                      const SizedBox(width: 10),
-                    ] else
+                    ] else ...[
                       const Spacer(),
-                    IconButton.filledTonal(
-                      tooltip: tr('edit_questions'),
-                      onPressed: onQuestions,
-                      icon: const Icon(Icons.quiz_outlined),
-                    ),
-                    const SizedBox(width: 8),
-                    IconButton.filledTonal(
-                      tooltip: tr('edit_exam'),
-                      onPressed: onEdit,
-                      icon: const Icon(Icons.settings_outlined),
-                    ),
-                    const SizedBox(width: 8),
-                    IconButton.filledTonal(
-                      tooltip: tr('delete_exam'),
-                      onPressed: onDelete,
-                      icon: const Icon(Icons.delete_outline),
-                    ),
-                    const SizedBox(width: 8),
-                    IconButton.filledTonal(
-                      tooltip: published
-                          ? tr('exam_already_published')
-                          : tr('publish_exam'),
-                      onPressed: canPublish ? onPublish : null,
-                      icon: const Icon(Icons.campaign_outlined),
-                    ),
+                      IconButton.filledTonal(
+                        tooltip: tr('edit_questions'),
+                        onPressed: onQuestions,
+                        icon: const Icon(Icons.quiz_outlined),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton.filledTonal(
+                        tooltip: tr('edit_exam'),
+                        onPressed: onEdit,
+                        icon: const Icon(Icons.settings_outlined),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton.filledTonal(
+                        tooltip: tr('delete_exam'),
+                        onPressed: onDelete,
+                        icon: const Icon(Icons.delete_outline),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton.filledTonal(
+                        tooltip: published
+                            ? tr('exam_already_published')
+                            : tr('publish_exam'),
+                        onPressed: canPublish ? onPublish : null,
+                        icon: const Icon(Icons.campaign_outlined),
+                      ),
+                    ],
                   ],
                 ),
               ],

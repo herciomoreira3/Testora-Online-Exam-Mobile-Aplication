@@ -23,6 +23,20 @@ class ExamRepository {
         });
   }
 
+  Stream<List<ExamModel>> getPublishedExams() {
+    return _firestore
+        .collection('exams')
+        .where('published', isEqualTo: true)
+        .snapshots()
+        .map((snapshot) {
+          final exams = snapshot.docs
+              .map((doc) => ExamModel.fromMap(doc.data(), doc.id))
+              .toList();
+          exams.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          return exams;
+        });
+  }
+
   // Fetch all questions under exams/{examId}/questions subcollection
   Future<List<QuestionModel>> getQuestionsForExam(String examId) async {
     try {

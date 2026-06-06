@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../shared/models/alert_model.dart';
@@ -77,11 +78,35 @@ class AlertRepository {
   Future<void> pushSingleAlert(String uid, AlertModel alert) async {
     await _pushService.sendToExternalIds(
       externalIds: [uid],
-      title: alert.title,
-      message: alert.message,
+      title: _localizedTitle(alert),
+      message: _localizedMessage(alert),
       type: alert.type,
       examId: alert.examId,
     );
+  }
+
+  String _localizedTitle(AlertModel alert) {
+    if (alert.titleKey.isNotEmpty) return tr(alert.titleKey);
+    if (alert.type == 'exam_sent_for_publish') {
+      return tr('alert_exam_sent_publish_title');
+    }
+    if (alert.type == 'exam_published') return tr('alert_exam_published_title');
+    if (alert.type == 'exam_reminder') return tr('alert_exam_reminder_title');
+    if (alert.type == 'exam_started') return tr('alert_exam_started_title');
+    return alert.title;
+  }
+
+  String _localizedMessage(AlertModel alert) {
+    if (alert.messageKey.isNotEmpty) {
+      return tr(alert.messageKey, args: alert.messageArgs);
+    }
+    if (alert.type == 'exam_sent_for_publish') {
+      return tr(
+        'alert_exam_sent_publish_message',
+        args: [alert.examTitle, alert.subject],
+      );
+    }
+    return alert.message;
   }
 }
 

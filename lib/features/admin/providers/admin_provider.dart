@@ -18,8 +18,69 @@ class AdminRepository {
         });
   }
 
-  Future<void> updateUserRole(String uid, String role) async {
-    await _firestore.collection('users').doc(uid).update({'role': role});
+  Future<void> updateUserRole(UserModel user, String role) async {
+    final newRole = UserModel.normalizeRole(role);
+    if (newRole != 'student' && newRole != 'teacher') {
+      throw 'role_admin_forbidden';
+    }
+    if (user.isAdmin) {
+      throw 'role_admin_locked';
+    }
+    if (newRole == user.role) return;
+
+    if (user.role.isNotEmpty && await isUserAssignedToAnySubject(user)) {
+      throw 'role_subject_locked';
+    }
+
+    await _firestore.collection('users').doc(user.uid).update({
+      'role': newRole,
+      'isActive': true,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<void> rejectUser(UserModel user) async {
+    if (user.isAdmin) {
+      throw 'role_admin_locked';
+    }
+    if (user.role.isNotEmpty) {
+      throw 'reject_pending_only';
+    }
+
+    await _firestore.collection('users').doc(user.uid).update({
+      'role': '',
+      'isActive': false,
+      'selectedSubjectId': '',
+      'rejectedAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<void> deleteRejectedUser(UserModel user) async {
+    if (user.isAdmin) {
+      throw 'role_admin_locked';
+    }
+    if (user.isActive || user.role.isNotEmpty) {
+      throw 'delete_rejected_only';
+    }
+
+    await _firestore.collection('users').doc(user.uid).delete();
+  }
+
+  Future<bool> isUserAssignedToAnySubject(UserModel user) async {
+    final teacherSubjects = await _firestore
+        .collection('subjects')
+        .where('teacherIds', arrayContains: user.uid)
+        .limit(1)
+        .get();
+    if (teacherSubjects.docs.isNotEmpty) return true;
+
+    final studentSubjects = await _firestore
+        .collection('subjects')
+        .where('studentIds', arrayContains: user.uid)
+        .limit(1)
+        .get();
+    return studentSubjects.docs.isNotEmpty;
   }
 
   Stream<List<SubjectModel>> getSubjects() {
@@ -104,6 +165,29 @@ class AdminRepository {
       'studentIds': studentIds,
       'updatedAt': FieldValue.serverTimestamp(),
     });
+  }
+
+  Future<void> removeStudentFromSubject({
+    required String subjectId,
+    required String studentId,
+    required List<String> remainingStudentIds,
+  }) async {
+    final batch = _firestore.batch();
+    batch.update(_firestore.collection('subjects').doc(subjectId), {
+      'studentIds': remainingStudentIds,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+
+    final userRef = _firestore.collection('users').doc(studentId);
+    final userDoc = await userRef.get();
+    if (userDoc.data()?['selectedSubjectId']?.toString() == subjectId) {
+      batch.update(userRef, {
+        'selectedSubjectId': '',
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    }
+
+    await batch.commit();
   }
 
   Future<void> deleteSubject(String subjectId) async {
