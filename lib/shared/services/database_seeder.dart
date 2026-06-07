@@ -13,7 +13,7 @@ class DatabaseSeeder {
         title: 'Matematika Wajib: Kalkulus II',
         subject: 'Matematika',
         description:
-            'Ujian mengenai turunan, integral, dan aplikasi kalkulus.',
+            'Exam about derivatives, integrals, and calculus applications.',
         duration: 120,
         status: 'wait',
         scheduledHour: 8,

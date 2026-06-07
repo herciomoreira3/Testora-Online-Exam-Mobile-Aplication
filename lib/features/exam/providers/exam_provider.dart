@@ -125,6 +125,20 @@ class ExamSessionNotifier extends Notifier<ExamSessionState?> {
     state = state!.copyWith(currentIndex: state!.currentIndex + 1);
   }
 
+  // Move the current question behind the remaining questions.
+  void skipQuestion() {
+    if (state == null ||
+        state!.questions.length <= 1 ||
+        state!.currentIndex >= state!.questions.length - 1) {
+      return;
+    }
+
+    final updatedQuestions = [...state!.questions];
+    final skippedQuestion = updatedQuestions.removeAt(state!.currentIndex);
+    updatedQuestions.add(skippedQuestion);
+    state = state!.copyWith(questions: updatedQuestions);
+  }
+
   // Go to previous question
   void previousQuestion() {
     if (state == null || state!.currentIndex <= 0) {
@@ -157,10 +171,9 @@ class ExamSessionNotifier extends Notifier<ExamSessionState?> {
           : 0.0;
 
       final remainingSeconds = ref.read(examTimerProvider);
-      final timeTaken =
-          (currentSession.timerStartSeconds - remainingSeconds)
-              .clamp(0, currentSession.timerStartSeconds)
-              .toInt();
+      final timeTaken = (currentSession.timerStartSeconds - remainingSeconds)
+          .clamp(0, currentSession.timerStartSeconds)
+          .toInt();
 
       // Stop the timer
       ref.read(examTimerProvider.notifier).stop();

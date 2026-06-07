@@ -41,8 +41,7 @@ service cloud.firestore {
       return resource.data.role == 'admin'
         ? request.resource.data.role == 'admin' &&
           request.resource.data.isActive == resource.data.isActive
-        : request.resource.data.role != 'admin' &&
-          (request.resource.data.role != '' || resource.data.role == '');
+        : request.resource.data.role != 'admin';
     }
 
     function isExamOwner(examId) {

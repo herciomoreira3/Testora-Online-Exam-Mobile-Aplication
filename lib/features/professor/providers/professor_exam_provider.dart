@@ -94,7 +94,11 @@ class ProfessorRepository {
         .collection('users')
         .where('role', isEqualTo: 'admin')
         .get();
-    final adminIds = adminSnapshot.docs.map((doc) => doc.id).toSet().toList();
+    final adminIds = adminSnapshot.docs
+        .where((doc) => doc.data()['isActive'] != false)
+        .map((doc) => doc.id)
+        .toSet()
+        .toList();
     final now = Timestamp.fromDate(DateTime.now());
     final title = tr('alert_exam_sent_publish_title');
     final message = tr(
@@ -159,12 +163,16 @@ class ProfessorRepository {
     }
     await _assertNoScheduleConflict(exam);
 
-    final recipientIds = <String>{
+    final candidateRecipientIds = <String>{
       ...?subject?.teacherIds,
       ...?subject?.studentIds,
       if (exam.teacherId.isNotEmpty) exam.teacherId,
       if (exam.createdBy.isNotEmpty) exam.createdBy,
     }..removeWhere((id) => id.isEmpty);
+    final recipientIds = await _activeUserIdsForRoles(
+      candidateRecipientIds,
+      const {'teacher', 'student'},
+    );
 
     final now = Timestamp.fromDate(DateTime.now());
     final reminderAt = exam.startTime.subtract(
@@ -193,6 +201,8 @@ class ProfessorRepository {
       required List<String> messageArgs,
       required DateTime scheduledAt,
     }) {
+      if (recipientIds.isEmpty) return;
+
       final alertRef = _firestore.collection('alerts').doc();
       batch.set(alertRef, {
         'type': type,
@@ -280,6 +290,24 @@ class ProfessorRepository {
         }
       }),
     );
+  }
+
+  Future<List<String>> _activeUserIdsForRoles(
+    Set<String> userIds,
+    Set<String> roles,
+  ) async {
+    final filtered = <String>[];
+    for (final userId in userIds) {
+      final userDoc = await _firestore.collection('users').doc(userId).get();
+      final data = userDoc.data();
+      if (data == null) continue;
+      final role = data['role']?.toString() ?? '';
+      final isActive = data['isActive'] != false;
+      if (isActive && roles.contains(role)) {
+        filtered.add(userId);
+      }
+    }
+    return filtered;
   }
 
   Future<void> _assertNoScheduleConflict(ExamModel exam) async {

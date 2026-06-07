@@ -16,7 +16,12 @@ class ProfileScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final userProfileAsync = ref.watch(userProfileProvider);
-    final authState = ref.watch(authControllerProvider);
+    final authControllerState = ref.watch(authControllerProvider);
+    final authUserAsync = ref.watch(authStateProvider);
+    final isAuthTransitioning =
+        authControllerState.isLoading ||
+        authUserAsync.isLoading ||
+        authUserAsync.value == null;
     final theme = Theme.of(context);
 
     return Scaffold(
@@ -51,6 +56,9 @@ class ProfileScreen extends ConsumerWidget {
         child: userProfileAsync.when(
           data: (user) {
             if (user == null) {
+              if (isAuthTransitioning) {
+                return const Center(child: CircularProgressIndicator());
+              }
               return Center(child: Text(tr('error_occurred')));
             }
 
@@ -148,7 +156,7 @@ class ProfileScreen extends ConsumerWidget {
                       borderRadius: BorderRadius.circular(20),
                     ),
                   ),
-                  onPressed: authState.isLoading
+                  onPressed: authControllerState.isLoading
                       ? null
                       : () async {
                           final success = await ref
@@ -163,7 +171,7 @@ class ProfileScreen extends ConsumerWidget {
                             router.go('/login');
                           }
                         },
-                  icon: authState.isLoading
+                  icon: authControllerState.isLoading
                       ? const SizedBox(
                           width: 18,
                           height: 18,
@@ -188,7 +196,9 @@ class ProfileScreen extends ConsumerWidget {
             );
           },
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (err, _) => Center(child: Text(tr('error_occurred'))),
+          error: (err, _) => isAuthTransitioning
+              ? const Center(child: CircularProgressIndicator())
+              : Center(child: Text(tr('error_occurred'))),
         ),
       ),
     );
@@ -396,7 +406,8 @@ class _SubjectPreferenceCard extends ConsumerStatefulWidget {
       _SubjectPreferenceCardState();
 }
 
-class _SubjectPreferenceCardState extends ConsumerState<_SubjectPreferenceCard> {
+class _SubjectPreferenceCardState
+    extends ConsumerState<_SubjectPreferenceCard> {
   String? _scheduledSelectedId;
 
   void _syncDefaultSubjectAfterBuild(String selectedId) {

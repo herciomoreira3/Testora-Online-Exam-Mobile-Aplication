@@ -236,15 +236,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                 return null;
                               },
                             ),
-                            const SizedBox(height: 10),
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: TextButton(
-                                onPressed: () {},
-                                child: Text(tr('forgot_password')),
-                              ),
-                            ),
-                            const SizedBox(height: 8),
+                            const SizedBox(height: 22),
                             CustomButton(
                               text: tr('login'),
                               isLoading: authState.isLoading,

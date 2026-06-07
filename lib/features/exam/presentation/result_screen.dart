@@ -26,7 +26,7 @@ class ResultScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Rezultadu Teste'),
+        title: Text(tr('exam_result_title')),
         automaticallyImplyLeading: false,
       ),
       body: SafeArea(

@@ -50,12 +50,7 @@ class _AdminReportsScreenState extends ConsumerState<AdminReportsScreen> {
     if (selected != null) setState(() => _studentId = selected);
   }
 
-  Future<void> _exportPdf(
-    List<_ReportRow> rows,
-    String subjectLabel,
-    String examLabel,
-    String studentLabel,
-  ) async {
+  Future<void> _exportPdf(List<_ReportRow> rows) async {
     if (rows.isEmpty) {
       ScaffoldMessenger.of(
         context,
@@ -74,13 +69,6 @@ class _AdminReportsScreenState extends ConsumerState<AdminReportsScreen> {
           margin: const pw.EdgeInsets.fromLTRB(32, 28, 32, 32),
           build: (context) => [
             _pdfReportHeader(generatedAt: generatedAt),
-            pw.SizedBox(height: 14),
-            _pdfFilterSummary(
-              subjectLabel: subjectLabel,
-              examLabel: examLabel,
-              studentLabel: studentLabel,
-              totalRows: rows.length,
-            ),
             pw.SizedBox(height: 18),
             pw.TableHelper.fromTextArray(
               headerStyle: pw.TextStyle(
@@ -177,13 +165,6 @@ class _AdminReportsScreenState extends ConsumerState<AdminReportsScreen> {
     final filteredExams = _subjectId == 'all'
         ? exams
         : exams.where((exam) => subjectExamIds.contains(exam.id)).toList();
-    final examLabel = _examId == 'all'
-        ? tr('all')
-        : exams
-                  .where((exam) => exam.id == _examId)
-                  .map((exam) => exam.title)
-                  .firstOrNull ??
-              tr('all');
     final assignedStudentIds = _subjectId == 'all'
         ? users.where((user) => user.isStudent).map((user) => user.uid).toSet()
         : subjects
@@ -296,12 +277,7 @@ class _AdminReportsScreenState extends ConsumerState<AdminReportsScreen> {
           ElevatedButton.icon(
             onPressed: _isExporting
                 ? null
-                : () => _exportPdf(
-                    rows,
-                    subjectLabel,
-                    examLabel,
-                    studentLabel,
-                  ),
+                : () => _exportPdf(rows),
             icon: _isExporting
                 ? const SizedBox(
                     width: 18,
@@ -449,67 +425,6 @@ pw.Widget _pdfReportHeader({required String generatedAt}) {
       ),
       pw.SizedBox(height: 14),
       pw.Container(height: 2, color: PdfColor.fromInt(0xFF00288E)),
-    ],
-  );
-}
-
-pw.Widget _pdfFilterSummary({
-  required String subjectLabel,
-  required String examLabel,
-  required String studentLabel,
-  required int totalRows,
-}) {
-  pw.Widget item(String label, String value) {
-    return pw.Container(
-      padding: const pw.EdgeInsets.all(8),
-      decoration: pw.BoxDecoration(
-        color: PdfColor.fromInt(0xFFF8FAFC),
-        border: pw.Border.all(color: PdfColor.fromInt(0xFFE2E8F0)),
-      ),
-      child: pw.Column(
-        crossAxisAlignment: pw.CrossAxisAlignment.start,
-        children: [
-          pw.Text(
-            label,
-            style: pw.TextStyle(
-              fontSize: 8,
-              color: PdfColor.fromInt(0xFF64748B),
-              fontWeight: pw.FontWeight.bold,
-            ),
-          ),
-          pw.SizedBox(height: 3),
-          pw.Text(value, style: const pw.TextStyle(fontSize: 10)),
-        ],
-      ),
-    );
-  }
-
-  return pw.Column(
-    crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-    children: [
-      pw.Text(
-        tr('reports_hint'),
-        style: pw.TextStyle(
-          fontSize: 10,
-          color: PdfColor.fromInt(0xFF475569),
-        ),
-      ),
-      pw.SizedBox(height: 10),
-      pw.Row(
-        children: [
-          pw.Expanded(child: item(tr('subject'), subjectLabel)),
-          pw.SizedBox(width: 8),
-          pw.Expanded(child: item(tr('manage_exams'), examLabel)),
-        ],
-      ),
-      pw.SizedBox(height: 8),
-      pw.Row(
-        children: [
-          pw.Expanded(child: item(tr('student'), studentLabel)),
-          pw.SizedBox(width: 8),
-          pw.Expanded(child: item(tr('total_students'), totalRows.toString())),
-        ],
-      ),
     ],
   );
 }

@@ -49,7 +49,11 @@ class AlertRepository {
     await batch.commit();
   }
 
-  Future<void> pushUnreadAlerts(String uid) async {
+  Future<void> pushUnreadAlerts(
+    String uid, {
+    void Function(AlertModel alert)? onQueued,
+    String? subscriptionId,
+  }) async {
     final snapshot = await _firestore
         .collection('alerts')
         .where('recipientIds', arrayContains: uid)
@@ -63,7 +67,10 @@ class AlertRepository {
           alert.isReadBy(uid)) {
         continue;
       }
-      pushJobs.add(pushSingleAlert(uid, alert));
+      onQueued?.call(alert);
+      pushJobs.add(
+        pushSingleAlert(uid, alert, subscriptionId: subscriptionId),
+      );
     }
 
     for (final job in pushJobs) {
@@ -75,11 +82,30 @@ class AlertRepository {
     }
   }
 
-  Future<void> pushSingleAlert(String uid, AlertModel alert) async {
+  Future<void> pushSingleAlert(
+    String uid,
+    AlertModel alert, {
+    String? subscriptionId,
+  }) async {
+    if (!alert.recipientIds.contains(uid)) return;
+
+    final title = _localizedTitle(alert);
+    final message = _localizedMessage(alert);
+    if (subscriptionId != null && subscriptionId.isNotEmpty) {
+      await _pushService.sendToSubscriptionIds(
+        subscriptionIds: [subscriptionId],
+        title: title,
+        message: message,
+        type: alert.type,
+        examId: alert.examId,
+      );
+      return;
+    }
+
     await _pushService.sendToExternalIds(
       externalIds: [uid],
-      title: _localizedTitle(alert),
-      message: _localizedMessage(alert),
+      title: title,
+      message: message,
       type: alert.type,
       examId: alert.examId,
     );

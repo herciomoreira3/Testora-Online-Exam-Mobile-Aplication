@@ -9,7 +9,7 @@ class OneSignalPushService {
 
   static const _appId = '51778ec8-c5ff-4661-85f9-cca8f1b5b105';
   static const _apiKey =
-      'os_v2_app_kf3y5sgf75dgdbpzzsupdnnraw2c47pn33ae3znqfkad7eqdukr3xu4xgeasovloe6zy5z2gwrh33se7bm3e7wb3yome3ozh4vk57ni';
+      'os_v2_app_kf3y5sgf75dgdbpzzsupdnnravwzdojnghpesr5v3kdth23g7jnoovqe34gxwsabej4bobeni55lqqtno3i26kfhvjvayglqol3qd2a';
   static final _endpoint = Uri.parse('https://api.onesignal.com/notifications');
   static final _legacyEndpoint = Uri.parse(
     'https://onesignal.com/api/v1/notifications',
@@ -30,25 +30,6 @@ class OneSignalPushService {
         .toList();
     if (recipients.isEmpty) return;
 
-    final subscriptionIds = await _subscriptionIdsForUsers(recipients);
-    if (subscriptionIds.isNotEmpty) {
-      final directPayload = _basePayload(
-        title: title,
-        message: message,
-        type: type,
-        examId: examId,
-        sendAfter: sendAfter,
-      )..['include_subscription_ids'] = subscriptionIds;
-      final sentDirect = await _post(
-        endpoint: _endpoint,
-        payload: directPayload,
-        authorization: 'key $_apiKey',
-        label: 'subscription',
-        allowThrow: false,
-      );
-      if (sentDirect) return;
-    }
-
     final aliasPayload = _basePayload(
       title: title,
       message: message,
@@ -59,11 +40,21 @@ class OneSignalPushService {
     final sentAlias = await _post(
       endpoint: _endpoint,
       payload: aliasPayload,
-      authorization: 'key $_apiKey',
+      authorization: 'Key $_apiKey',
       label: 'external_id',
       allowThrow: false,
     );
     if (sentAlias) return;
+
+    await Future<void>.delayed(const Duration(seconds: 2));
+    final retriedAlias = await _post(
+      endpoint: _endpoint,
+      payload: aliasPayload,
+      authorization: 'Key $_apiKey',
+      label: 'external_id_retry',
+      allowThrow: false,
+    );
+    if (retriedAlias) return;
 
     final legacyPayload = <String, dynamic>{
       'app_id': _appId,
@@ -80,8 +71,40 @@ class OneSignalPushService {
     await _post(
       endpoint: _legacyEndpoint,
       payload: legacyPayload,
-      authorization: 'key $_apiKey',
+      authorization: 'Key $_apiKey',
       label: 'legacy_external_id',
+      allowThrow: true,
+    );
+  }
+
+  Future<void> sendToSubscriptionIds({
+    required List<String> subscriptionIds,
+    required String title,
+    required String message,
+    String type = 'alert',
+    String examId = '',
+    DateTime? sendAfter,
+  }) async {
+    final recipients = subscriptionIds
+        .where((id) => id.trim().isNotEmpty)
+        .map((id) => id.trim())
+        .toSet()
+        .toList();
+    if (recipients.isEmpty) return;
+
+    final payload = _basePayload(
+      title: title,
+      message: message,
+      type: type,
+      examId: examId,
+      sendAfter: sendAfter,
+    )..['include_subscription_ids'] = recipients;
+
+    await _post(
+      endpoint: _endpoint,
+      payload: payload,
+      authorization: 'Key $_apiKey',
+      label: 'subscription',
       allowThrow: true,
     );
   }
@@ -128,8 +151,10 @@ class OneSignalPushService {
     final body = _decodeBody(response.body);
     final hasErrors = body['errors'] != null;
     final recipients = int.tryParse(body['recipients']?.toString() ?? '');
+    final hasRecipients = recipients == null || recipients > 0;
+    final hasDeliveredRecipients = (recipients ?? 0) > 0;
     final delivered =
-        ok && !hasErrors && (recipients == null || recipients > 0);
+        ok && hasRecipients && (!hasErrors || hasDeliveredRecipients);
     debugPrint(
       'OneSignal $label ${response.statusCode}: ${response.body}',
       wrapWidth: 1024,
@@ -147,24 +172,6 @@ class OneSignalPushService {
       );
     }
     return delivered;
-  }
-
-  Future<List<String>> _subscriptionIdsForUsers(List<String> userIds) async {
-    final firestore = FirebaseFirestore.instance;
-    final ids = <String>{};
-    for (final userId in userIds) {
-      try {
-        final doc = await firestore.collection('users').doc(userId).get();
-        final data = doc.data();
-        final subscriptionId = data?['oneSignalSubscriptionId']?.toString();
-        if (subscriptionId != null && subscriptionId.isNotEmpty) {
-          ids.add(subscriptionId);
-        }
-      } catch (_) {
-        // Fall back to external_id if reading the subscription fails.
-      }
-    }
-    return ids.toList();
   }
 
   Map<String, dynamic> _decodeBody(String body) {

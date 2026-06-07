@@ -43,10 +43,7 @@ class AuthRepository {
     }
 
     final profile = UserModel.fromMap(data, doc.id);
-    if (!profile.isActive || profile.role.isEmpty) {
-      await signOut();
-      throw 'account_not_approved';
-    }
+    await _ensureProfileCanLogin(profile);
   }
 
   Future<UserCredential> signInWithGoogle({
@@ -106,6 +103,7 @@ class AuthRepository {
         throw 'account_not_approved';
       }
       if (profile.isActive && profile.role.isNotEmpty) {
+        await _ensureProfileCanLogin(profile);
         await _refreshGoogleProfile(user, uidDoc.data()!, email);
         return;
       }
@@ -170,7 +168,9 @@ class AuthRepository {
 
     for (final candidate in unique.values) {
       final profile = UserModel.fromMap(candidate.data(), candidate.id);
-      if (profile.isActive && profile.role.isNotEmpty) {
+      if (profile.isActive &&
+          profile.role.isNotEmpty &&
+          await _hasRequiredSubjectAssignment(profile)) {
         return candidate;
       }
     }
@@ -184,10 +184,7 @@ class AuthRepository {
   ) async {
     final approvedData = approvedDoc.data();
     final profile = UserModel.fromMap(approvedData, approvedDoc.id);
-    if (!profile.isActive || profile.role.isEmpty) {
-      await signOut();
-      throw 'account_not_approved';
-    }
+    await _ensureProfileCanLogin(profile);
 
     await _firestore.collection('users').doc(user.uid).set({
       ...approvedData,
@@ -224,6 +221,33 @@ class AuthRepository {
         'photoUrl': user.photoURL ?? '',
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
+  }
+
+  Future<void> _ensureProfileCanLogin(UserModel profile) async {
+    if (!profile.isActive ||
+        profile.role.isEmpty ||
+        !await _hasRequiredSubjectAssignment(profile)) {
+      await signOut();
+      throw 'account_not_approved';
+    }
+  }
+
+  Future<bool> _hasRequiredSubjectAssignment(UserModel profile) async {
+    if (profile.isAdmin) return true;
+
+    final field = profile.isTeacher
+        ? 'teacherIds'
+        : profile.isStudent
+        ? 'studentIds'
+        : '';
+    if (field.isEmpty) return false;
+
+    final subjects = await _firestore
+        .collection('subjects')
+        .where(field, arrayContains: profile.uid)
+        .limit(1)
+        .get();
+    return subjects.docs.isNotEmpty;
   }
 
   Future<void> _createPendingGoogleUser(User user, String emailLower) async {

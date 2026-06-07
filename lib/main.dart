@@ -24,7 +24,10 @@ import 'shared/models/alert_model.dart';
 const _oneSignalAppId = '51778ec8-c5ff-4661-85f9-cca8f1b5b105';
 final Set<String> _oneSignalSyncedUsers = <String>{};
 final Set<String> _unreadPushSyncedUsers = <String>{};
+final Set<String> _unreadPushInFlightUsers = <String>{};
 final Set<String> _pushedAlertIds = <String>{};
+Future<void> _oneSignalSessionQueue = Future<void>.value();
+int _oneSignalSessionEpoch = 0;
 String? _activeOneSignalUid;
 
 void main() async {
@@ -59,7 +62,9 @@ class MyApp extends ConsumerWidget {
     final darkMode = darkModeOverride ?? profileAsync.value?.darkMode ?? false;
     final authUser = ref.watch(authStateProvider).value;
     if (authUser != null) {
-      unawaited(_syncOneSignalSession(ref, authUser.uid));
+      unawaited(
+        _syncOneSignalSession(ref, authUser.uid, pushUnreadAlerts: true),
+      );
     }
     ref.listen(myAlertsProvider, (previous, next) {
       final uid = ref.read(authStateProvider).value?.uid;
@@ -79,14 +84,19 @@ class MyApp extends ConsumerWidget {
         _activeOneSignalUid = null;
         _oneSignalSyncedUsers.clear();
         _unreadPushSyncedUsers.clear();
+        _unreadPushInFlightUsers.clear();
         _pushedAlertIds.clear();
-        unawaited(OneSignal.logout());
+        unawaited(_logoutOneSignalSession());
         return;
       }
       if (previousUid != null && previousUid != user.uid) {
         _resetSessionScopedProviders(ref);
+        _oneSignalSyncedUsers.remove(previousUid);
+        _unreadPushSyncedUsers.remove(previousUid);
+        _unreadPushInFlightUsers.remove(previousUid);
+        _pushedAlertIds.removeWhere((id) => id.startsWith('${previousUid}_'));
       }
-      unawaited(_syncOneSignalSession(ref, user.uid));
+      unawaited(_syncOneSignalSession(ref, user.uid, pushUnreadAlerts: true));
     });
     ref.listen(userProfileProvider, (previous, next) {
       final previousUser = previous?.value;
@@ -160,35 +170,140 @@ void _resetSessionScopedProviders(WidgetRef ref) {
   ref.invalidate(myAlertsProvider);
 }
 
-Future<void> _syncOneSignalSession(WidgetRef ref, String uid) async {
-  try {
-    if (_activeOneSignalUid != null && _activeOneSignalUid != uid) {
-      await OneSignal.logout();
-      _oneSignalSyncedUsers.remove(uid);
-      _unreadPushSyncedUsers.remove(uid);
-    }
-    _activeOneSignalUid = uid;
+Future<void> _queueOneSignalSession(Future<void> Function() action) {
+  final next = _oneSignalSessionQueue.then((_) => action());
+  _oneSignalSessionQueue = next.catchError((Object error, StackTrace stack) {
+    debugPrint('OneSignal queued action failed: $error\n$stack');
+  });
+  return next;
+}
 
-    if (_oneSignalSyncedUsers.add(uid)) {
-      await OneSignal.Notifications.requestPermission(true);
-      await OneSignal.User.pushSubscription.optIn();
-      await OneSignal.login(uid);
-      await _persistOneSignalSubscription(ref, uid);
+Future<void> _logoutOneSignalSession() {
+  return _queueOneSignalSession(() async {
+    try {
+      _oneSignalSessionEpoch++;
+      await OneSignal.logout();
+    } catch (error, stackTrace) {
+      debugPrint('OneSignal logout failed: $error\n$stackTrace');
     }
-    if (!_unreadPushSyncedUsers.add(uid)) return;
-    await ref.read(alertRepositoryProvider).pushUnreadAlerts(uid);
+  });
+}
+
+Future<void> _syncOneSignalSession(
+  WidgetRef ref,
+  String uid, {
+  bool pushUnreadAlerts = false,
+}) async {
+  return _queueOneSignalSession(() async {
+    try {
+      if (ref.read(authStateProvider).value?.uid != uid) return;
+
+      if (_activeOneSignalUid != null && _activeOneSignalUid != uid) {
+        final previousUid = _activeOneSignalUid!;
+        _oneSignalSessionEpoch++;
+        await OneSignal.logout();
+        _oneSignalSyncedUsers.remove(previousUid);
+        _unreadPushSyncedUsers.remove(previousUid);
+        _unreadPushInFlightUsers.remove(previousUid);
+        _pushedAlertIds.removeWhere((id) => id.startsWith('${previousUid}_'));
+      }
+      _activeOneSignalUid = uid;
+
+      if (_oneSignalSyncedUsers.add(uid)) {
+        await OneSignal.Notifications.requestPermission(true);
+        await OneSignal.User.pushSubscription.optIn();
+        await OneSignal.login(uid);
+        await _ensureOneSignalExternalId(uid);
+        final epoch = ++_oneSignalSessionEpoch;
+        unawaited(_persistOneSignalSubscription(ref, uid, epoch));
+      }
+      if (ref.read(authStateProvider).value?.uid != uid) return;
+
+      final shouldPushUnread =
+          pushUnreadAlerts &&
+          !_unreadPushSyncedUsers.contains(uid) &&
+          _unreadPushInFlightUsers.add(uid);
+      if (!shouldPushUnread) return;
+      try {
+        final subscriptionId = await _currentOneSignalSubscriptionId(uid);
+        await ref
+            .read(alertRepositoryProvider)
+            .pushUnreadAlerts(
+              uid,
+              onQueued: (alert) => _pushedAlertIds.add('${uid}_${alert.id}'),
+              subscriptionId: subscriptionId,
+            );
+        _unreadPushSyncedUsers.add(uid);
+      } finally {
+        _unreadPushInFlightUsers.remove(uid);
+      }
+    } catch (error, stackTrace) {
+      debugPrint('OneSignal session sync failed: $error\n$stackTrace');
+    }
+  });
+}
+
+Future<void> _ensureOneSignalExternalId(String uid) async {
+  try {
+    await OneSignal.User.addAlias('external_id', uid);
   } catch (error, stackTrace) {
-    debugPrint('OneSignal session sync failed: $error\n$stackTrace');
+    debugPrint('OneSignal external_id alias failed: $error\n$stackTrace');
+  }
+
+  for (final delay in const [
+    Duration.zero,
+    Duration(milliseconds: 300),
+    Duration(milliseconds: 700),
+    Duration(milliseconds: 1200),
+    Duration(seconds: 2),
+  ]) {
+    if (delay > Duration.zero) {
+      await Future<void>.delayed(delay);
+    }
+    if (_activeOneSignalUid != uid) return;
+    try {
+      final externalId = await OneSignal.User.getExternalId();
+      if (externalId == uid) return;
+    } catch (error, stackTrace) {
+      debugPrint('OneSignal external_id read failed: $error\n$stackTrace');
+      return;
+    }
   }
 }
 
-Future<void> _persistOneSignalSubscription(WidgetRef ref, String uid) async {
+Future<String?> _currentOneSignalSubscriptionId(String uid) async {
+  for (final delay in const [
+    Duration.zero,
+    Duration(milliseconds: 350),
+    Duration(milliseconds: 800),
+    Duration(milliseconds: 1400),
+  ]) {
+    if (delay > Duration.zero) {
+      await Future<void>.delayed(delay);
+    }
+    if (_activeOneSignalUid != uid) return null;
+    final subscriptionId = OneSignal.User.pushSubscription.id;
+    if (subscriptionId != null && subscriptionId.isNotEmpty) {
+      return subscriptionId;
+    }
+  }
+  return null;
+}
+
+Future<void> _persistOneSignalSubscription(
+  WidgetRef ref,
+  String uid,
+  int epoch,
+) async {
   for (final delay in const [
     Duration(milliseconds: 700),
     Duration(seconds: 2),
     Duration(seconds: 5),
   ]) {
     await Future<void>.delayed(delay);
+    if (_activeOneSignalUid != uid || _oneSignalSessionEpoch != epoch) {
+      return;
+    }
     try {
       await ref
           .read(authRepositoryProvider)

@@ -445,6 +445,7 @@ class _UserCard extends StatelessWidget {
     final roleValue = user.role.isEmpty ? null : user.role;
     final isRejected = user.role.isEmpty && !user.isActive;
     final isPending = user.role.isEmpty && user.isActive;
+    final canReject = !user.isAdmin && user.isActive && !isAssignedToSubject;
     final isLocked = user.isAdmin || isRejected || isAssignedToSubject;
     final accentColor = isRejected
         ? Theme.of(context).colorScheme.error
@@ -531,12 +532,14 @@ class _UserCard extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 10),
-          if (isPending)
+          if (canReject)
             TextButton.icon(
               onPressed: onReject,
               icon: const Icon(Icons.block_outlined),
               label: Text(tr('reject')),
-              style: TextButton.styleFrom(foregroundColor: accentColor),
+              style: TextButton.styleFrom(
+                foregroundColor: Theme.of(context).colorScheme.error,
+              ),
             )
           else if (isRejected)
             IconButton(

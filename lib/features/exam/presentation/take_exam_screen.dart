@@ -48,7 +48,9 @@ class _TakeExamScreenState extends ConsumerState<TakeExamScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     final session = ref.read(examSessionProvider);
-    if (session == null || !session.exam.antiCheatEnabled || _isAutoSubmitting) {
+    if (session == null ||
+        !session.exam.antiCheatEnabled ||
+        _isAutoSubmitting) {
       return;
     }
     if (state == AppLifecycleState.inactive ||
@@ -134,7 +136,9 @@ class _TakeExamScreenState extends ConsumerState<TakeExamScreen>
       setState(() => _blockMessageKey = 'exam_already_submitted');
       return;
     }
-    await ref.read(examSessionProvider.notifier).startSession(exam, _autoSubmit);
+    await ref
+        .read(examSessionProvider.notifier)
+        .startSession(exam, _autoSubmit);
   }
 
   void _autoSubmit() async {
@@ -182,9 +186,9 @@ class _TakeExamScreenState extends ConsumerState<TakeExamScreen>
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Sai husi Teste?'),
+        title: const Text('Sai husi Ezame?'),
         content: const Text(
-          'Resposta nebe ita boot hatan ona sei entrega agora, no teste sei remata.',
+          'Resposta nebe ita boot hatan ona sei entrega agora, no ezame sei remata.',
         ),
         actions: [
           TextButton(
@@ -214,6 +218,11 @@ class _TakeExamScreenState extends ConsumerState<TakeExamScreen>
 
   void _goToNextQuestion() {
     ref.read(examSessionProvider.notifier).nextQuestion();
+    _scrollQuestionToTop();
+  }
+
+  void _skipQuestion() {
+    ref.read(examSessionProvider.notifier).skipQuestion();
     _scrollQuestionToTop();
   }
 
@@ -326,6 +335,9 @@ class _TakeExamScreenState extends ConsumerState<TakeExamScreen>
     }
 
     final currentQuestion = session.questions[session.currentIndex];
+    final canSkipQuestion =
+        session.questions.length > 1 &&
+        session.currentIndex < session.questions.length - 1;
     final progressPercentage = session.questions.isNotEmpty
         ? (session.answers.length / session.questions.length)
         : 0.0;
@@ -343,9 +355,7 @@ class _TakeExamScreenState extends ConsumerState<TakeExamScreen>
             icon: const Icon(Icons.close_rounded),
             onPressed: _showExitConfirmation,
           ),
-          actions: [
-            const _ExamTimerBadge(),
-          ],
+          actions: [const _ExamTimerBadge()],
         ),
         body: Stack(
           children: [
@@ -549,6 +559,21 @@ class _TakeExamScreenState extends ConsumerState<TakeExamScreen>
                           size: 16,
                         ),
                         label: const Text('Kotuk'),
+                      ),
+
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        icon: const Icon(Icons.skip_next_rounded, size: 18),
+                        label: Text(tr('skip_question')),
+                        onPressed: canSkipQuestion ? _skipQuestion : null,
                       ),
 
                       // Submit button for last question or general shortcut

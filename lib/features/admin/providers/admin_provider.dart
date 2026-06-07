@@ -7,15 +7,13 @@ class AdminRepository {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   Stream<List<UserModel>> getAllUsers() {
-    return _firestore
-        .collection('users')
-        .snapshots()
-        .map((snap) {
-          final users =
-              snap.docs.map((d) => UserModel.fromMap(d.data(), d.id)).toList();
-          users.sort((a, b) => a.createdAt.compareTo(b.createdAt));
-          return users;
-        });
+    return _firestore.collection('users').snapshots().map((snap) {
+      final users = snap.docs
+          .map((d) => UserModel.fromMap(d.data(), d.id))
+          .toList();
+      users.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      return users;
+    });
   }
 
   Future<void> updateUserRole(UserModel user, String role) async {
@@ -43,8 +41,11 @@ class AdminRepository {
     if (user.isAdmin) {
       throw 'role_admin_locked';
     }
-    if (user.role.isNotEmpty) {
-      throw 'reject_pending_only';
+    if (await isUserAssignedToAnySubject(user)) {
+      throw 'role_subject_locked';
+    }
+    if (!user.isActive && user.role.isEmpty) {
+      throw 'delete_rejected_only';
     }
 
     await _firestore.collection('users').doc(user.uid).update({
@@ -191,7 +192,22 @@ class AdminRepository {
   }
 
   Future<void> deleteSubject(String subjectId) async {
-    await _firestore.collection('subjects').doc(subjectId).delete();
+    final subjectRef = _firestore.collection('subjects').doc(subjectId);
+    final subjectDoc = await subjectRef.get();
+    final data = subjectDoc.data();
+    if (data == null) return;
+
+    final teacherIds = (data['teacherIds'] as List? ?? const [])
+        .map((id) => id.toString())
+        .where((id) => id.isNotEmpty);
+    final studentIds = (data['studentIds'] as List? ?? const [])
+        .map((id) => id.toString())
+        .where((id) => id.isNotEmpty);
+    if (teacherIds.isNotEmpty || studentIds.isNotEmpty) {
+      throw 'subject_delete_locked';
+    }
+
+    await subjectRef.delete();
   }
 }
 
@@ -209,10 +225,14 @@ final subjectsProvider = StreamProvider<List<SubjectModel>>((ref) {
 
 final teacherSubjectsProvider =
     StreamProvider.family<List<SubjectModel>, String>((ref, teacherId) {
-  return ref.watch(adminRepositoryProvider).getSubjectsForTeacher(teacherId);
-});
+      return ref
+          .watch(adminRepositoryProvider)
+          .getSubjectsForTeacher(teacherId);
+    });
 
 final studentSubjectsProvider =
     StreamProvider.family<List<SubjectModel>, String>((ref, studentId) {
-  return ref.watch(adminRepositoryProvider).getSubjectsForStudent(studentId);
-});
+      return ref
+          .watch(adminRepositoryProvider)
+          .getSubjectsForStudent(studentId);
+    });

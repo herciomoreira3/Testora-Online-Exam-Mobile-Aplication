@@ -69,11 +69,28 @@ class _ManageSubjectsScreenState extends ConsumerState<ManageSubjectsScreen> {
       ),
     );
     if (confirmed != true) return;
-    await ref.read(adminRepositoryProvider).deleteSubject(subject.id);
-    if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(tr('subject_deleted'))));
+    try {
+      await ref.read(adminRepositoryProvider).deleteSubject(subject.id);
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(tr('subject_deleted'))));
+      }
+    } catch (error) {
+      if (!mounted) return;
+      final errorKey = error.toString();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            tr(
+              errorKey == 'subject_delete_locked'
+                  ? 'subject_delete_locked'
+                  : 'error_occurred',
+            ),
+          ),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
     }
   }
 
@@ -120,6 +137,9 @@ class _ManageSubjectsScreenState extends ConsumerState<ManageSubjectsScreen> {
                     .where((user) => subject.teacherIds.contains(user.uid))
                     .cast<UserModel?>()
                     .firstOrNull;
+                final hasAssignedUsers =
+                    subject.teacherIds.isNotEmpty ||
+                    subject.studentIds.isNotEmpty;
                 return _SubjectCard(
                   subject: subject,
                   teacher: teacher,
@@ -127,7 +147,9 @@ class _ManageSubjectsScreenState extends ConsumerState<ManageSubjectsScreen> {
                       ? () => _openTeacherAssignment(subject)
                       : () => _openStudentAssignment(subject),
                   onEdit: () => _openSubjectForm(subject: subject),
-                  onDelete: () => _confirmDelete(subject),
+                  onDelete: hasAssignedUsers
+                      ? null
+                      : () => _confirmDelete(subject),
                 );
               }),
             ],
@@ -147,14 +169,14 @@ class _SubjectCard extends StatelessWidget {
     required this.teacher,
     required this.onAdd,
     required this.onEdit,
-    required this.onDelete,
+    this.onDelete,
   });
 
   final SubjectModel subject;
   final UserModel? teacher;
   final VoidCallback onAdd;
   final VoidCallback onEdit;
-  final VoidCallback onDelete;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -257,13 +279,15 @@ class _SubjectCard extends StatelessWidget {
                 icon: Icons.edit_outlined,
                 onPressed: onEdit,
               ),
-              const SizedBox(width: 8),
-              _SubjectActionButton(
-                tooltip: tr('delete'),
-                icon: Icons.delete_outline,
-                color: Colors.red,
-                onPressed: onDelete,
-              ),
+              if (onDelete != null) ...[
+                const SizedBox(width: 8),
+                _SubjectActionButton(
+                  tooltip: tr('delete'),
+                  icon: Icons.delete_outline,
+                  color: Colors.red,
+                  onPressed: onDelete!,
+                ),
+              ],
             ],
           ),
         ],
@@ -673,10 +697,7 @@ class _StudentAssignmentSheetState
     if (_selectedStudentIds.isEmpty) return;
     setState(() => _isSaving = true);
     try {
-      final updated = {
-        ..._assignedStudentIds,
-        ..._selectedStudentIds,
-      }.toList();
+      final updated = {..._assignedStudentIds, ..._selectedStudentIds}.toList();
       await ref
           .read(adminRepositoryProvider)
           .assignStudentsToSubject(widget.subject.id, updated);
@@ -692,11 +713,13 @@ class _StudentAssignmentSheetState
       final updated = _assignedStudentIds
           .where((studentId) => studentId != student.uid)
           .toList();
-      await ref.read(adminRepositoryProvider).removeStudentFromSubject(
-        subjectId: widget.subject.id,
-        studentId: student.uid,
-        remainingStudentIds: updated,
-      );
+      await ref
+          .read(adminRepositoryProvider)
+          .removeStudentFromSubject(
+            subjectId: widget.subject.id,
+            studentId: student.uid,
+            remainingStudentIds: updated,
+          );
       if (mounted) {
         setState(() {
           _assignedStudentIds = updated.toSet();
